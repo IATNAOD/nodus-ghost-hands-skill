@@ -160,7 +160,7 @@ NODUS сравнивает русское произношение с англи
 | `CLAUDE.md` | правила и команды проекта |
 
 ```sh
-npm install && npm --prefix client install
+yarn && npm --prefix client install   # корень — yarn (yarn.lock), клиент — npm (client/package-lock.json)
 npm test                    # тесты навыка
 npm run dev-host            # навык без устройства NODUS: сервер для ПК, мини-панель :8080, консоль фраз
 npm --prefix client run helper   # собрать GhostHelper.exe (нужен .NET SDK)

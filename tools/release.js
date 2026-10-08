@@ -18,8 +18,9 @@ const BRANCH = "main";
 const REMOTE = "origin";
 // package.json files: the version is replaced in the text, the formatting stays
 const MANIFESTS = ["package.json", "client/package.json", "skill/skill.json"];
-// lock files are written by npm as JSON.stringify(…, null, 2): a round trip keeps them as they are
-const LOCKS = ["package-lock.json", "client/package-lock.json"];
+// npm lock files are JSON.stringify(…, null, 2): a round trip keeps them as they are. The root
+// may install with yarn instead: yarn.lock has no version of the project, there is nothing to write.
+const LOCKS = ["package-lock.json", "client/package-lock.json"].filter((file) => fs.existsSync(path.join(root, file)));
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
 
 const args = process.argv.slice(2);

@@ -23,6 +23,8 @@
 
 ## Команды
 
+Зависимости: корень — `yarn` (`yarn.lock`), клиент — `npm --prefix client install` (`client/package-lock.json`). Скрипты запускаются через `npm run` в обоих местах.
+
 ```sh
 npm test                          # тесты навыка (node:test)
 npm run routing:assert            # маршрутизация фраз против встроенных интентов NODUS

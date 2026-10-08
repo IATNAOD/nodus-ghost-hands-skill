@@ -40,8 +40,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22.20"
-          cache: npm
-      - run: npm ci
+          cache: yarn
+      # the root installs with yarn (yarn.lock), the client with npm (client/package-lock.json)
+      - run: yarn install --frozen-lockfile
       - run: npm test
       - run: npm run check
       - run: npm run routing:assert

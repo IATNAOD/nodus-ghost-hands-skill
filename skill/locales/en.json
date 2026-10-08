@@ -1,0 +1,300 @@
+{
+  "lang": "en",
+  "skill": {
+    "name": "Ghost Hands",
+    "description": "Control your computers by voice: games and apps, volume, shutdown, web search."
+  },
+  "configSchema": {
+    "port": {
+      "label": "Port for computers",
+      "description": "The Ghost Hands client connects to NODUS on this port, 47300 by default. After a change, set the new port in the clients."
+    },
+    "unknown_voice": {
+      "label": "When the voice is not recognized",
+      "description": "What to do when NODUS does not recognize the speaker by the voice profile.",
+      "ask": "Ask \"Who is it?\"",
+      "shared": "Control only shared computers",
+      "deny": "Do not run commands"
+    },
+    "voice_check": {
+      "label": "Voice check",
+      "description": "Confirm identity by repeating a phrase. Needs a voice profile.",
+      "off": "Do not check",
+      "power": "For shutdown, restart and sleep",
+      "all": "For all commands"
+    },
+    "children": {
+      "label": "Children",
+      "description": "What users of the \"child\" type may do.",
+      "allow": "Everything",
+      "no_power": "Everything except shutdown, restart and sleep",
+      "deny": "Nothing"
+    },
+    "guests_shared": {
+      "label": "Guests control shared computers",
+      "description": "In guest mode and for unknown voices."
+    },
+    "ask_pc_every_time": {
+      "label": "Always ask which computer",
+      "description": "Do not reuse the computer chosen in the last 2 minutes when several fit."
+    },
+    "ai_names": {
+      "label": "Match names with AI",
+      "description": "When an app name is not recognized, the AI picks it from the list and NODUS asks to confirm. Only app names go to the AI."
+    },
+    "reply_timeout": {
+      "label": "How long to wait for a computer, seconds",
+      "description": "From 3 to 20."
+    }
+  },
+  "events": {
+    "pc_online": { "label": "Computer came online" },
+    "pc_offline": { "label": "Computer went offline" },
+    "app_started": { "label": "App or game started on a computer" },
+    "app_stopped": { "label": "App or game closed on a computer" }
+  },
+  "nodes": {
+    "pc_run_app": {
+      "label": "Run on computer",
+      "description": "Starts an app or a game on the scenario owner's computer.",
+      "summary": "Run {{app}}",
+      "keywords": "computer pc run start game app",
+      "inputs": { "app": "App or game", "computer": "Computer (empty - the only one online)" },
+      "outputs": { "app": "Name", "computer": "Computer" }
+    },
+    "pc_power_action": {
+      "label": "Computer power",
+      "description": "Shuts down, restarts, puts to sleep or locks a computer.",
+      "summary": "Computer {{computer}}",
+      "keywords": "computer pc shutdown restart sleep lock",
+      "inputs": { "action": "Action", "computer": "Computer (empty - the only one online)", "delay": "Delay" },
+      "options": {
+        "action": {
+          "shutdown": "Shut down",
+          "restart": "Restart",
+          "sleep": "Sleep",
+          "lock": "Lock",
+          "display_off": "Turn off the monitor",
+          "cancel": "Cancel shutdown"
+        }
+      },
+      "outputs": { "computer": "Computer" }
+    },
+    "pc_set_volume": {
+      "label": "Computer volume",
+      "description": "Changes the sound volume on a computer.",
+      "summary": "Volume {{level}}",
+      "keywords": "computer pc volume sound",
+      "inputs": { "mode": "Action", "level": "Level, %", "computer": "Computer (empty - the only one online)" },
+      "options": {
+        "mode": { "set": "Set", "up": "Turn up", "down": "Turn down", "mute": "Mute", "unmute": "Unmute" }
+      },
+      "outputs": { "level": "Volume", "muted": "Muted", "computer": "Computer" }
+    },
+    "pc_show_message": {
+      "label": "Message on computer",
+      "description": "Shows a Windows notification on a computer.",
+      "summary": "{{text}}",
+      "keywords": "computer pc notification message",
+      "inputs": { "text": "Text", "title": "Title", "computer": "Computer (empty - the only one online)" },
+      "outputs": { "computer": "Computer" }
+    },
+    "pc_is_online": {
+      "label": "Computer online?",
+      "description": "Checks whether a computer is connected to NODUS.",
+      "summary": "{{computer}} online?",
+      "keywords": "computer pc online on",
+      "inputs": { "computer": "Computer (empty - the only one)" },
+      "outputs": { "exec_out_true": "Online", "exec_out_false": "Offline", "online": "Online", "computer": "Computer" }
+    },
+    "pc_wake_up": {
+      "label": "Turn on computer",
+      "description": "Wakes a computer over the network (Wake-on-LAN).",
+      "summary": "Turn on {{computer}}",
+      "keywords": "computer pc turn on wake wake on lan",
+      "inputs": { "computer": "Computer (empty - the only one)" },
+      "outputs": { "computer": "Computer", "already": "Was already on" }
+    }
+  },
+  "common": {
+    "not_ready": "Ghost Hands is still starting. Try again in a minute.",
+    "no_pcs": "You have no connected computers. The key to connect one is in the personal settings of the Ghost Hands skill.",
+    "no_shared_pcs": "There are no shared computers to control.",
+    "pc_not_found": "I couldn't find the computer {{name}}.",
+    "pc_offline": "The computer {{pc}} is offline.",
+    "all_offline": "None of your computers is online.",
+    "feature_off": "This command is turned off in the settings of {{pc}}.",
+    "paused": "Control of {{pc}} is paused.",
+    "name_the_pc": "Name the computer: {{names, list(type: disjunction)}}.",
+    "which_pc": "On which computer: {{names, list(type: disjunction)}}?",
+    "which_app": "Which one: {{names, list(type: disjunction)}}?",
+    "not_heard": "I didn't catch that, cancelling.",
+    "cancelled": "OK, cancelling.",
+    "pc_not_understood": "I didn't get which computer. Cancelling.",
+    "not_understood": "I didn't get which one. Cancelling.",
+    "offer_wake": "The computer {{pc}} is off. Turn it on?",
+    "kept_off": "OK, I won't turn it on.",
+    "one_moment": "One moment",
+    "child_denied": "Only an adult can do that.",
+    "guest_denied": "Computers can't be controlled in guest mode.",
+    "unknown_denied": "I don't recognize the voice, so I won't control the computer.",
+    "who_unknown": "I don't know who is speaking, so I'm not doing anything."
+  },
+  "errors": {
+    "offline": "The computer {{pc}} is offline.",
+    "timeout": "The computer {{pc}} didn't answer.",
+    "disconnected": "The connection to {{pc}} was lost.",
+    "feature_disabled": "This command is turned off in the settings of {{pc}}.",
+    "paused": "Control of {{pc}} is paused.",
+    "app_not_found": "I couldn't find {{name}} on {{pc}}.",
+    "launcher_missing": "{{name}} needs a launcher that {{pc}} doesn't have.",
+    "launch_failed": "I couldn't start {{name}}.",
+    "needs_elevation": "It needs administrator rights. Confirm the request on the computer's screen.",
+    "cancelled": "The launch was cancelled on the computer.",
+    "not_running": "{{name}} isn't running.",
+    "close_timeout": "{{name}} doesn't close.",
+    "helper_unavailable": "The client on {{pc}} can't do it. Restart Ghost Hands on the computer.",
+    "no_audio_device": "{{pc}} has no sound output device.",
+    "invalid_args": "The computer didn't understand the command.",
+    "unknown_action": "The client on {{pc}} doesn't know this command. Update it.",
+    "busy": "{{pc}} is busy. Try again.",
+    "internal": "I couldn't run the command on {{pc}}."
+  },
+  "intents": {
+    "launch_app": {
+      "label": "Start an app or a game on the computer",
+      "error": "I couldn't start it.",
+      "what": "What should I start?",
+      "which_game": "Which game should I start?",
+      "confirm": "Start {{name}}?",
+      "not_found": "I couldn't find {{name}} on your computers.",
+      "not_on_pc": "{{name}} isn't on {{pc}}.",
+      "done": "Starting {{name}}.",
+      "done_on_pc": "Starting {{name}} on {{pc}}.",
+      "already": "{{name}} is already running.",
+      "already_on_pc": "{{name}} is already running on {{pc}}.",
+      "done_many": "Starting {{names, list}}.",
+      "done_many_on_pc": "Starting {{names, list}} on {{pc}}.",
+      "deferred": "Turning on {{pc}}. I'll start {{names, list}} when it boots.",
+      "deferred_failed": "I couldn't start {{names, list}}: {{pc}} never came online"
+    },
+    "close_app": {
+      "label": "Close an app or a game on the computer",
+      "error": "I couldn't close it.",
+      "what": "What should I close?",
+      "confirm": "Close {{name}}?",
+      "not_found": "I couldn't find {{name}} among running apps.",
+      "not_running": "{{name}} isn't running.",
+      "no_game": "I don't see any running games.",
+      "which": "Which one should I close: {{names, list(type: disjunction)}}?",
+      "stuck": "{{name}} doesn't close. Force it?",
+      "kept": "OK, leaving it.",
+      "forced": "Force-closed {{name}}.",
+      "done": "Closed {{name}}.",
+      "done_on_pc": "Closed {{name}} on {{pc}}."
+    },
+    "pc_power": {
+      "label": "Shut down, restart, put to sleep or lock the computer",
+      "error": "I couldn't do it.",
+      "confirm_shutdown": "Shut down {{pc}}?",
+      "confirm_shutdown_open": "Shut down {{pc}}? {{apps, list}} is still running.",
+      "confirm_shutdown_many": "Shut down {{pcs, list}}?",
+      "confirm_restart": "Restart {{pc}}?",
+      "confirm_restart_open": "Restart {{pc}}? {{apps, list}} is still running.",
+      "confirm_restart_many": "Restart {{pcs, list}}?",
+      "kept": "OK, leaving it.",
+      "shutdown": "Shutting down the computer.",
+      "shutdown_on_pc": "Shutting down {{pc}}.",
+      "shutdown_many": "Shutting down {{pcs, list}}.",
+      "shutdown_later": "{{pc}} will shut down {{when}}.",
+      "shutdown_later_many": "{{pcs, list}} will shut down {{when}}.",
+      "restart": "Restarting the computer.",
+      "restart_on_pc": "Restarting {{pc}}.",
+      "restart_many": "Restarting {{pcs, list}}.",
+      "restart_later": "{{pc}} will restart {{when}}.",
+      "restart_later_many": "{{pcs, list}} will restart {{when}}.",
+      "sleep": "Putting the computer to sleep.",
+      "sleep_on_pc": "Putting {{pc}} to sleep.",
+      "sleep_many": "Putting {{pcs, list}} to sleep.",
+      "sleep_later": "{{pc}} will go to sleep {{when}}.",
+      "sleep_later_many": "{{pcs, list}} will go to sleep {{when}}.",
+      "lock": "Locking the computer.",
+      "lock_on_pc": "Locking {{pc}}.",
+      "lock_many": "Locking {{pcs, list}}.",
+      "lock_later": "{{pc}} will lock {{when}}.",
+      "lock_later_many": "{{pcs, list}} will lock {{when}}.",
+      "display_off": "Turning off the monitor.",
+      "display_off_on_pc": "Turning off the monitor of {{pc}}.",
+      "display_off_many": "Turning off the monitors of {{pcs, list}}.",
+      "display_off_later": "The monitor of {{pc}} will turn off {{when}}.",
+      "display_off_later_many": "The monitors of {{pcs, list}} will turn off {{when}}.",
+      "cancelled": "Shutdown cancelled.",
+      "nothing_to_cancel": "No shutdown is scheduled."
+    },
+    "pc_wake": {
+      "label": "Turn on the computer over the network",
+      "error": "I couldn't turn on the computer.",
+      "already_on": "{{pc}} is already on.",
+      "no_wol": "Wake-on-LAN isn't set up for {{pc}}.",
+      "failed": "I couldn't send the wake signal to {{pc}}.",
+      "sent": "Turning on {{pc}}. It will be online in about a minute.",
+      "sent_wifi": "Sending the wake signal to {{pc}}. Over Wi-Fi it doesn't always work."
+    },
+    "pc_volume": {
+      "label": "Volume on the computer",
+      "error": "I couldn't change the volume.",
+      "muted": "Muted.",
+      "unmuted": "Unmuted.",
+      "level": "Volume is {{level}} percent.",
+      "level_on_pc": "Volume on {{pc}} is {{level}} percent.",
+      "is_muted": "The sound is off.",
+      "is_muted_on_pc": "The sound on {{pc}} is off.",
+      "set": "Volume {{level}} percent.",
+      "set_on_pc": "Volume on {{pc}} is {{level}} percent.",
+      "set_many": "Done, volume {{level}} percent."
+    },
+    "pc_media": {
+      "label": "Music and video on the computer: pause, next track",
+      "error": "That didn't work.",
+      "play_pause": "Done.",
+      "next": "Next track.",
+      "prev": "Previous track."
+    },
+    "pc_search": {
+      "label": "Web search on the computer",
+      "error": "I couldn't open the search.",
+      "what": "What should I look for?",
+      "done": "Searching for {{query}}.",
+      "done_on_pc": "Searching for {{query}} on {{pc}}.",
+      "done_youtube": "Searching YouTube for {{query}}.",
+      "done_youtube_on_pc": "Searching YouTube for {{query}} on {{pc}}."
+    },
+    "pc_status": {
+      "label": "Which computers are online and what runs on them",
+      "error": "I couldn't check the computers.",
+      "running": "{{names, list}} running on {{pc}}.",
+      "nothing_running": "Nothing is running on {{pc}}.",
+      "running_hidden": "{{pc}} doesn't share its list of running apps.",
+      "none_online": "No computer is online right now.",
+      "single_online": "{{pc}} is online.",
+      "online": "Online: {{names, list}}."
+    },
+    "pc_control": {
+      "label": "Computer control: start and close apps and games, shutdown, volume, music and web search",
+      "error": "I couldn't run the command on the computer.",
+      "unknown": "There is no such command for the computer."
+    }
+  },
+  "time": {
+    "at": "at {{at}}",
+    "in": "in {{span}}",
+    "hours_one": "{{count}} hour",
+    "hours_other": "{{count}} hours",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes"
+  },
+  "prompts": {
+    "app_pick": "The person said: \"{{phrase}}\". Which app from the list do they mean?",
+    "app_pick_system": "You pick an app or a game from the list by how a person named it by voice in Russian or English: a translation, an abbreviation, slang (\"ведьмак\" is The Witcher, \"контра\" is Counter-Strike). If nothing fits, choose none. Answer only with JSON."
+  }
+}

@@ -1,0 +1,53 @@
+appId: space.iatnaod.ghosthands
+productName: Ghost Hands
+copyright: Copyright © 2026 IATNAOD
+
+directories:
+  output: release
+  buildResources: build
+
+# the app is the bundle in out/; production node_modules are added by electron-builder
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+
+extraResources:
+  - from: resources/helper
+    to: helper
+    filter: ["GhostHelper.exe"]
+  - from: resources/icons
+    to: icons
+
+electronLanguages: [ru, en-US]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  executableName: GhostHands
+  artifactName: GhostHands-Setup-${version}.${ext}
+
+# per-user install without admin rights; the installer starts the app when it finishes
+nsis:
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Ghost Hands
+  uninstallDisplayName: Ghost Hands
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
+
+protocols:
+  - name: Ghost Hands
+    schemes: [ghosthands]
+
+# releases of IATNAOD/nodus-ghost-hands-skill: client tags vX.Y.Z are "Latest" and carry latest.yml
+publish:
+  provider: github
+  owner: IATNAOD
+  repo: nodus-ghost-hands-skill
+  releaseType: release

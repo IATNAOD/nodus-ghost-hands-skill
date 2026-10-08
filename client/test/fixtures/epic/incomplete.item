@@ -1,0 +1,25 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": true,
+	"LaunchCommand": "",
+	"LaunchExecutable": "Moonlighter.exe",
+	"bIsApplication": true,
+	"bIsExecutable": true,
+	"AppCategories": [
+		"games",
+		"applications"
+	],
+	"DisplayName": "Moonlighter",
+	"InstallationGuid": "9E1ECD5349B81697C7B1D5A78CDAE762",
+	"InstallLocation": "E:EpicGamesMoonlighter",
+	"TechnicalType": "games,applications",
+	"InstallSize": 30305765527,
+	"MandatoryAppFolderName": "Satisfactory",
+	"CatalogNamespace": "crab",
+	"CatalogItemId": "b915dfe8dcf74770841c82a4162dc954",
+	"AppName": "Eagle",
+	"AppVersionString": "495413.6a38f668600988e652a256b4-promoted",
+	"MainGameCatalogNamespace": "",
+	"MainGameCatalogItemId": "",
+	"MainGameAppName": ""
+}

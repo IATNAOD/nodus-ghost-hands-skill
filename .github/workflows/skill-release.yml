@@ -1,0 +1,37 @@
+# Skill release: tag skill-vX.Y.Z (the same as skill/skill.json).
+# Not marked Latest: Latest belongs to the client, its auto-update reads only that release.
+name: Release skill
+
+on:
+  push:
+    tags: ["skill-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.20
+          cache: npm
+      - name: Tag matches the skill version
+        run: |
+          version=$(node -p "require('./skill/skill.json').version")
+          if [ "skill-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match skill/skill.json version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run routing:assert
+      - run: npm run pack
+      - name: Publish the skill ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "dist/ghost_hands-$VERSION.zip" --title "Ghost Hands skill $VERSION" --generate-notes --latest=false

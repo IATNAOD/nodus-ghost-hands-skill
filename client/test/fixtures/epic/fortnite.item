@@ -1,0 +1,25 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": false,
+	"LaunchCommand": "",
+	"LaunchExecutable": "FortniteGame/Binaries/Win64/FortniteBootstrapper.exe",
+	"bIsApplication": true,
+	"bIsExecutable": true,
+	"AppCategories": [
+		"games",
+		"applications"
+	],
+	"DisplayName": "Fortnite",
+	"InstallationGuid": "3B9B563742DF8F52CEF594A160E3BCEB",
+	"InstallLocation": "E:\\EpicGames\\Fortnite",
+	"TechnicalType": "games,applications",
+	"InstallSize": 66287084254,
+	"MandatoryAppFolderName": "Fortnite",
+	"CatalogNamespace": "fn",
+	"CatalogItemId": "4fe75bbc5a674f4f9b356b5c90567da5",
+	"AppName": "Fortnite",
+	"AppVersionString": "++Fortnite+Release-42.30-CL-58813929-Windows",
+	"MainGameCatalogNamespace": "",
+	"MainGameCatalogItemId": "",
+	"MainGameAppName": ""
+}

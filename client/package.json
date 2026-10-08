@@ -1,0 +1,43 @@
+{
+  "name": "ghost-hands",
+  "productName": "Ghost Hands",
+  "version": "1.0.0",
+  "description": "Ghost Hands: control your Windows PC by voice through NODUS",
+  "author": "IATNAOD",
+  "license": "MIT",
+  "private": true,
+  "homepage": "https://github.com/IATNAOD/nodus-ghost-hands-skill",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "helper": "powershell -NoProfile -ExecutionPolicy Bypass -File helper/build-helper.ps1",
+    "icons": "node scripts/make-icons.mjs",
+    "dist": "npm run build && electron-builder --win --x64 --publish never",
+    "release": "npm run build && electron-builder --win --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-log": "5.4.4",
+    "electron-updater": "6.8.9",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/ws": "8.18.2",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "lucide-react": "1.52.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "5.0.3"
+  }
+}

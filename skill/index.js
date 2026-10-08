@@ -1,0 +1,166 @@
+/**
+ * Ghost Hands: voice control of Windows PCs.
+ * The skill keeps its own WebSocket server for PCs (lib/server.js, lib/hub.js),
+ * an in-memory index of PCs and apps for routing (lib/name-index.js) and the
+ * command pipeline (lib/command.js) used by intents, the AI agent and blocks.
+ */
+"use strict";
+
+const { NameIndex } = require("./lib/name-index");
+const { Hub } = require("./lib/hub");
+const { Server } = require("./lib/server");
+const { createStore } = require("./lib/store");
+const { readSettings, loadedConfigs } = require("./lib/settings");
+const { ScenarioEvents } = require("./lib/events");
+const { Deferred } = require("./lib/deferred");
+const { RecentChoices } = require("./lib/select");
+const state = require("./lib/state");
+const { trace } = require("./lib/trace");
+const wol = require("./lib/wol");
+const manifest = require("./skill.json");
+
+let instance = null;
+
+class GhostHands {
+  /**
+   * @param {object} ctx lifecycle ctx
+   * @param {{ port?: number }} [options] tests and tools/dev-host.js: a port instead of the setting
+   */
+  constructor(ctx, options = {}) {
+    this.ctx = ctx;
+    this.options = options;
+    /** tests and tools/dev-host.js put a memory store here before init() */
+    this.store = null;
+    this.index = null;
+    this.hub = null;
+    this.server = null;
+    this.events = null;
+    this.deferred = null;
+    this.recent = new RecentChoices();
+    this.configs = [];
+    this.settings = readSettings([]);
+  }
+
+  static getInstance() {
+    return instance;
+  }
+
+  async init(ctx) {
+    this.ctx = ctx;
+    this.configs = loadedConfigs(ctx);
+    this.settings = readSettings(this.configs);
+    this.store = this.store ?? createStore(ctx.models);
+    this.index = new NameIndex();
+
+    for (const record of await this.store.devices.all()) {
+      this.index.upsert({ ...record, config: record.config ?? { name: record.name }, online: false });
+    }
+
+    this.events = new ScenarioEvents({ ctx, log: trace });
+    this.deferred = new Deferred({ log: trace });
+    this.hub = new Hub({
+      store: this.store,
+      index: this.index,
+      log: trace,
+      version: manifest.version,
+      onEvent: (type, data) => this.onHubEvent(type, data),
+    });
+    this.server = new Server({ hub: this.hub, log: trace });
+
+    state.set({ skill: this, index: this.index, hub: this.hub });
+    // listening is background work: a busy port must not stop the skill from loading
+    this.serverStarted = this.server.start(this.options.port ?? this.settings.port).catch((error) => trace(`server: ${error.message}`));
+    instance = this;
+  }
+
+  /** Synchronous: the core does not await it. */
+  onConfigChange(configs) {
+    try {
+      const next = readSettings(configs);
+      const portChanged = next.port !== this.settings.port;
+
+      this.configs = configs;
+      this.settings = next;
+      if (portChanged && this.server && this.options.port === undefined) this.server.restart(next.port).catch((error) => trace(`restart: ${error.message}`));
+    } catch (error) {
+      trace(`settings: ${error.message}`);
+    }
+  }
+
+  onHubEvent(type, data) {
+    try {
+      switch (type) {
+        case "online":
+          this.events.online(data.device, data.lastSeenAt);
+          break;
+        case "offline":
+          this.events.offline(data.device);
+          break;
+        case "config":
+          this.deferred.ready(data.device.deviceId);
+          break;
+        case "app-started":
+          this.events.app("app_started", data.device, data.app, data.item);
+          break;
+        case "app-stopped":
+          this.events.app("app_stopped", data.device, data.app, data.item);
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      trace(`event ${type}: ${error.message}`);
+    }
+  }
+
+  /** Wake-on-LAN packet (replaced in tests). */
+  wake(mac, broadcast) {
+    return wol.wake(mac, broadcast);
+  }
+
+  /** ctx for work outside a command (a launch after Wake-on-LAN). */
+  backgroundCtx() {
+    return this.ctx;
+  }
+
+  /** Say something to a person when they can hear it (permission notify). */
+  async notify(userId, text) {
+    if (typeof this.ctx?.notify !== "function" || !text) return;
+
+    try {
+      await this.ctx.notify({
+        to: userId ? String(userId) : null,
+        text: String(text).trim().replace(/[.!]+$/, ""),
+        kind: "reminder",
+        announce: true,
+        source: this.ctx.skillId,
+        undeliveredAfterMin: 10,
+        expiresInMin: 30,
+      });
+    } catch (error) {
+      trace(`notify: ${error.message}`);
+    }
+  }
+
+  /** Also after a failed init(); safe to call twice. */
+  async destroy() {
+    if (instance === this) instance = null;
+    if (state.get()?.skill === this) state.set(null);
+
+    this.events?.dispose();
+    this.deferred?.dispose();
+
+    try {
+      await this.hub?.dispose();
+    } catch (error) {
+      trace(`hub: ${error.message}`);
+    }
+    try {
+      await this.server?.stop();
+    } catch (error) {
+      trace(`server: ${error.message}`);
+    }
+  }
+}
+
+module.exports = GhostHands;

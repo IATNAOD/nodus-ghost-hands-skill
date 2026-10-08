@@ -1,0 +1,24 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": false,
+	"LaunchCommand": "",
+	"LaunchExecutable": "",
+	"bIsApplication": false,
+	"bIsExecutable": false,
+	"AppCategories": [
+		"hidden"
+	],
+	"DisplayName": "Материалы Fortnite: «Сражение с Бурей»",
+	"InstallationGuid": "98648F1E0369BEFD7EEC37CDF81A6716",
+	"InstallLocation": "E:\\EpicGames\\Fortnite",
+	"TechnicalType": "hidden",
+	"InstallSize": 5014566403,
+	"MandatoryAppFolderName": "aa31f9e94e844b299ca757d1d0b97a09",
+	"CatalogNamespace": "fn",
+	"CatalogItemId": "0b41f0192f7f4f2691684581aedc0778",
+	"AppName": "aa31f9e94e844b299ca757d1d0b97a09",
+	"AppVersionString": "++Fortnite+Release-42.30-CL-58813929-Windows",
+	"MainGameCatalogNamespace": "fn",
+	"MainGameCatalogItemId": "4fe75bbc5a674f4f9b356b5c90567da5",
+	"MainGameAppName": "Fortnite"
+}

@@ -1,0 +1,101 @@
+{
+  "id": "ghost_hands",
+  "name": "skill.name",
+  "description": "skill.description",
+  "version": "1.0.0",
+  "author": "IATNAOD",
+  "license": "MIT",
+  "permissions": ["askUser", "verifyIdentity", "secrets", "notify", "scenarioEngine", "synthesizeText"],
+  "llm": {
+    "required": false,
+    "providers": ["local", "ollama", "openai", "anthropic", "gemini"]
+  },
+  "network": { "services": [] },
+  "dependencies": { "ws": "8.22.0" },
+  "userSettingsPath": "account/index.html",
+  "configSchema": [
+    {
+      "type": "input",
+      "dataType": "number",
+      "name": "port",
+      "label": "configSchema.port.label",
+      "description": "configSchema.port.description",
+      "min": 1024,
+      "max": 65535,
+      "defaultValue": 47300
+    },
+    {
+      "type": "select",
+      "name": "unknown_voice",
+      "label": "configSchema.unknown_voice.label",
+      "description": "configSchema.unknown_voice.description",
+      "defaultValue": "ask",
+      "options": [
+        { "value": "ask", "label": "configSchema.unknown_voice.ask" },
+        { "value": "shared", "label": "configSchema.unknown_voice.shared" },
+        { "value": "deny", "label": "configSchema.unknown_voice.deny" }
+      ]
+    },
+    {
+      "type": "select",
+      "name": "voice_check",
+      "label": "configSchema.voice_check.label",
+      "description": "configSchema.voice_check.description",
+      "defaultValue": "off",
+      "options": [
+        { "value": "off", "label": "configSchema.voice_check.off" },
+        { "value": "power", "label": "configSchema.voice_check.power" },
+        { "value": "all", "label": "configSchema.voice_check.all" }
+      ]
+    },
+    {
+      "type": "select",
+      "name": "children",
+      "label": "configSchema.children.label",
+      "description": "configSchema.children.description",
+      "defaultValue": "no_power",
+      "options": [
+        { "value": "allow", "label": "configSchema.children.allow" },
+        { "value": "no_power", "label": "configSchema.children.no_power" },
+        { "value": "deny", "label": "configSchema.children.deny" }
+      ]
+    },
+    {
+      "type": "checkbox",
+      "name": "guests_shared",
+      "label": "configSchema.guests_shared.label",
+      "description": "configSchema.guests_shared.description",
+      "defaultValue": false
+    },
+    {
+      "type": "checkbox",
+      "name": "ask_pc_every_time",
+      "label": "configSchema.ask_pc_every_time.label",
+      "description": "configSchema.ask_pc_every_time.description",
+      "defaultValue": false
+    },
+    {
+      "type": "checkbox",
+      "name": "ai_names",
+      "label": "configSchema.ai_names.label",
+      "description": "configSchema.ai_names.description",
+      "defaultValue": true
+    },
+    {
+      "type": "input",
+      "dataType": "number",
+      "name": "reply_timeout",
+      "label": "configSchema.reply_timeout.label",
+      "description": "configSchema.reply_timeout.description",
+      "min": 3,
+      "max": 20,
+      "defaultValue": 8
+    }
+  ],
+  "events": [
+    { "id": "pc_online", "label": "events.pc_online.label", "outputs": ["text", "from", "computer"] },
+    { "id": "pc_offline", "label": "events.pc_offline.label", "outputs": ["text", "from", "computer"] },
+    { "id": "app_started", "label": "events.app_started.label", "outputs": ["text", "from", "computer", "app", "kind"] },
+    { "id": "app_stopped", "label": "events.app_stopped.label", "outputs": ["text", "from", "computer", "app", "kind"] }
+  ]
+}

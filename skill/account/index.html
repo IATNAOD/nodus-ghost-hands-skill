@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ghost Hands</title>
+<style>
+  :root {
+    --orange: #ff9a4d;
+    --purple: #ad67ff;
+    --gradient: linear-gradient(135deg, #ad67ff 0%, #ff9a4d 100%);
+    --field: #1e1630;
+    --border: #2b2140;
+    --text: #f8f6fc;
+    --text-2: #a89cc4;
+    --muted: #7d6f9a;
+    --danger: #ff5c7a;
+    --on-accent: #140c20;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { padding: 16px; display: grid; gap: 14px; max-width: 900px; }
+  h1, h2, h3, p { margin: 0; }
+  h2 { font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  h2 .step { width: 22px; height: 22px; border-radius: 50%; background: var(--gradient); color: var(--on-accent); font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; flex: none; }
+  .hero { display: flex; align-items: center; gap: 14px; padding: 4px 2px 2px; }
+  .hero svg { width: 44px; height: 44px; flex: none; filter: drop-shadow(0 4px 14px rgba(173, 103, 255, .35)); }
+  .hero h1 { font-size: 20px; font-weight: 750; letter-spacing: .2px; background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { color: var(--text-2); }
+  .card { background: rgba(30, 22, 48, .72); border: 1px solid var(--border); border-radius: 14px; padding: 16px; display: grid; gap: 12px; transition: border-color .2s, box-shadow .2s; }
+  .card:hover { border-color: rgba(173, 103, 255, .45); box-shadow: 0 0 24px rgba(173, 103, 255, .12); }
+  .hint { color: var(--text-2); font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .key { flex: 1 1 280px; min-width: 0; font: 600 15px/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .6px; padding: 11px 12px; color: var(--text); background: var(--field); border: 1px solid var(--border); border-radius: 10px; outline: none; }
+  .key:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(173, 103, 255, .25); }
+  button, .button { appearance: none; border: 1px solid transparent; border-radius: 10px; padding: 9px 14px; font: 600 13px/1.2 inherit; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: filter .15s, background .15s, border-color .15s, transform .05s; }
+  button:active, .button:active { transform: translateY(1px); }
+  button:disabled { opacity: .55; cursor: default; }
+  .primary { background: var(--gradient); color: var(--on-accent); }
+  .primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .secondary { background: transparent; color: var(--text); border-color: rgba(173, 103, 255, .55); }
+  .secondary:hover:not(:disabled) { background: rgba(173, 103, 255, .12); }
+  .ghost { background: transparent; color: var(--text-2); padding: 6px 8px; }
+  .ghost:hover:not(:disabled) { color: var(--text); }
+  .danger { background: transparent; color: var(--danger); border-color: rgba(255, 92, 122, .45); }
+  .danger:hover:not(:disabled) { background: rgba(255, 92, 122, .1); }
+  .address { font: 600 14px ui-monospace, Consolas, monospace; padding: 4px 10px; border-radius: 8px; background: var(--field); border: 1px solid var(--border); }
+  .pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-2); }
+  .pill.ok { color: var(--orange); border-color: rgba(255, 154, 77, .5); }
+  .pill.bad { color: var(--danger); border-color: rgba(255, 92, 122, .5); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .device { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--field); border: 1px solid var(--border); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--orange); box-shadow: 0 0 0 4px rgba(255, 154, 77, .18); }
+  .device .body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+  .device .name { font-weight: 650; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .device .meta { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: rgba(173, 103, 255, .16); color: #d6b4ff; }
+  .badge.orange { background: rgba(255, 154, 77, .14); color: var(--orange); }
+  .empty { color: var(--text-2); padding: 12px; border: 1px dashed var(--border); border-radius: 12px; text-align: center; }
+  .history li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; font-size: 13px; padding: 6px 2px; border-bottom: 1px solid rgba(43, 33, 64, .6); }
+  .history li:last-child { border-bottom: 0; }
+  .history .when { color: var(--muted); white-space: nowrap; }
+  .history .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history .fail { color: var(--danger); }
+  .history .done { color: var(--orange); }
+  .phrases { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+  .phrases div { padding: 8px 10px; border-radius: 10px; background: var(--field); border: 1px solid var(--border); font-size: 13px; }
+  .phrases div::before { content: "«"; color: var(--purple); }
+  .phrases div::after { content: "»"; color: var(--purple); }
+  .warning { border-color: rgba(255, 92, 122, .45); }
+  .confirm { display: none; padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 92, 122, .45); background: rgba(255, 92, 122, .06); gap: 10px; }
+  .confirm.open { display: grid; }
+  [hidden] { display: none !important; }
+  footer { color: var(--muted); font-size: 12px; padding: 0 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ad67ff" />
+          <stop offset="1" stop-color="#ff9a4d" />
+        </linearGradient>
+      </defs>
+      <path fill="url(#g)" d="M10 42V20a14 14 0 0 1 28 0v22l-4.67-4-4.66 4-4.67-4-4.67 4-4.66-4z" />
+      <circle cx="18.5" cy="21" r="3" fill="#140c20" />
+      <circle cx="29.5" cy="21" r="3" fill="#140c20" />
+      <path d="M19.67 28.5a5 5 0 0 0 8.66 0" stroke="#140c20" stroke-width="2.4" fill="none" stroke-linecap="round" />
+    </svg>
+    <div>
+      <h1>Ghost Hands</h1>
+      <p data-t="tagline"></p>
+    </div>
+  </section>
+
+  <section class="card warning" id="off" hidden>
+    <p data-t="skillOff"></p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">1</span><span data-t="installTitle"></span></h2>
+    <p class="hint" data-t="installHint"></p>
+    <div class="row">
+      <a class="button primary" id="download" href="https://github.com/IATNAOD/nodus-ghost-hands-skill/releases/latest" target="_blank" rel="noopener" data-t="download"></a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span><span data-t="keyTitle"></span></h2>
+    <p class="hint" data-t="keyHint"></p>
+    <div class="row">
+      <input class="key" id="key" readonly spellcheck="false" aria-label="key" />
+      <button class="secondary" id="reveal" data-t="show"></button>
+      <button class="primary" id="copy" data-t="copy"></button>
+    </div>
+    <div class="row">
+      <button class="secondary" id="open" data-t="openApp"></button>
+      <button class="ghost" id="rotate" data-t="rotate"></button>
+      <span class="hint" id="keyMeta"></span>
+    </div>
+    <div class="confirm" id="rotateConfirm">
+      <p data-t="rotateWarn"></p>
+      <div class="row">
+        <button class="danger" id="rotateYes" data-t="rotateYes"></button>
+        <button class="ghost" id="rotateNo" data-t="cancel"></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span><span data-t="addressTitle"></span></h2>
+    <p class="hint" data-t="addressHint"></p>
+    <div class="row">
+      <span class="address" id="address"></span>
+      <span class="pill" id="serverState"></span>
+    </div>
+    <p class="hint" id="ips"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-t="myPcs"></h2>
+    <ul id="devices"></ul>
+  </section>
+
+  <section class="card" id="sharedCard" hidden>
+    <h2 data-t="sharedPcs"></h2>
+    <ul id="shared"></ul>
+  </section>
+
+  <section class="card">
+    <h2 data-t="historyTitle"></h2>
+    <ul class="history" id="history"></ul>
+  </section>
+
+  <section class="card">
+    <h2 data-t="phrasesTitle"></h2>
+    <div class="phrases" id="phrases"></div>
+  </section>
+
+  <section class="card" id="adminCard" hidden>
+    <h2 data-t="adminTitle"></h2>
+    <ul id="adminDevices"></ul>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+
+<script>
+  "use strict";
+
+  const TEXTS = {
+    ru: {
+      tagline: "Управление компьютерами голосом",
+      skillOff: "Навык выключен. Попросите администратора включить его в разделе «Навыки».",
+      installTitle: "Установите клиент на компьютер",
+      installHint: "Клиент Ghost Hands для Windows 10 и 11 запускается вместе с системой и обновляется сам.",
+      download: "Скачать для Windows",
+      keyTitle: "Вставьте ключ в клиент",
+      keyHint: "Ключ личный: по нему NODUS понимает, что компьютер ваш. Не передавайте его другим.",
+      show: "Показать",
+      hide: "Скрыть",
+      copy: "Копировать",
+      copied: "Ключ скопирован",
+      copyFailed: "Не удалось скопировать — выделите ключ и нажмите Ctrl+C",
+      openApp: "Открыть в приложении",
+      rotate: "Перевыпустить ключ",
+      rotateWarn: "Старый ключ перестанет работать: все ваши компьютеры отключатся, и в каждый нужно будет вставить новый ключ.",
+      rotateYes: "Перевыпустить",
+      rotated: "Ключ перевыпущен",
+      cancel: "Отмена",
+      keyCreated: "создан {{when}}",
+      keyUsed: "последнее подключение {{when}}",
+      keyUnreadable: "Ключ не читается (сменился ключ устройства). Перевыпустите его.",
+      addressTitle: "Адрес NODUS",
+      addressHint: "Клиент находит NODUS сам. Если не находит, укажите в клиенте этот адрес или IP.",
+      listening: "Сервер работает",
+      portBusy: "Порт занят",
+      serverError: "Сервер не запущен",
+      starting: "Запускается",
+      ipList: "IP: {{ips}}",
+      myPcs: "Мои компьютеры",
+      noPcs: "Компьютеров пока нет. Установите клиент и вставьте в него ключ.",
+      online: "в сети",
+      offline: "не в сети · {{when}}",
+      neverSeen: "не в сети",
+      shared: "Общий",
+      wol: "Включение по сети",
+      wolWifi: "Wi-Fi",
+      paused: "Пауза",
+      apps: "приложений: {{count}}",
+      unpair: "Отвязать",
+      unpairConfirm: "Отвязать?",
+      unpaired: "Компьютер отвязан",
+      sharedPcs: "Общие компьютеры семьи",
+      owner: "владелец: {{name}}",
+      historyTitle: "Последние команды",
+      noHistory: "Команд пока не было.",
+      phrasesTitle: "Что говорить",
+      adminTitle: "Все компьютеры дома",
+      footer: "Ghost Hands {{version}}",
+      errorPrefix: "Ошибка: ",
+      actions: {
+        "app.launch": "Запуск", "app.close": "Закрытие", "volume.set": "Громкость", "volume.change": "Громкость",
+        "volume.mute": "Звук", "volume.get": "Громкость", "media.key": "Медиа", "power.shutdown": "Выключение",
+        "power.restart": "Перезагрузка", "power.sleep": "Сон", "power.lock": "Блокировка", "power.cancel": "Отмена выключения",
+        "display.off": "Монитор", "web.search": "Поиск", "toast.show": "Сообщение", "wake": "Включение по сети",
+      },
+      phrases: [
+        "запусти доту", "открой стим на ноутбуке", "закрой игру", "закрой хром",
+        "сделай громче на компьютере", "громкость на компьютере тридцать", "выключи звук на компьютере",
+        "пауза на компьютере", "следующий трек на компьютере", "найди в интернете рецепт борща",
+        "выключи компьютер", "выключи компьютер через час", "отмени выключение", "заблокируй компьютер",
+        "включи компьютер", "какие компьютеры в сети",
+      ],
+    },
+    en: {
+      tagline: "Control your computers by voice",
+      skillOff: "The skill is turned off. Ask an administrator to turn it on in Skills.",
+      installTitle: "Install the client on your computer",
+      installHint: "The Ghost Hands client for Windows 10 and 11 starts with the system and updates itself.",
+      download: "Download for Windows",
+      keyTitle: "Paste the key into the client",
+      keyHint: "The key is personal: with it NODUS knows the computer is yours. Don't share it.",
+      show: "Show",
+      hide: "Hide",
+      copy: "Copy",
+      copied: "Key copied",
+      copyFailed: "Copy failed - select the key and press Ctrl+C",
+      openApp: "Open in the app",
+      rotate: "Issue a new key",
+      rotateWarn: "The old key will stop working: all your computers disconnect and each needs the new key.",
+      rotateYes: "Issue",
+      rotated: "A new key is issued",
+      cancel: "Cancel",
+      keyCreated: "created {{when}}",
+      keyUsed: "last connection {{when}}",
+      keyUnreadable: "The key can't be read (the device key changed). Issue a new one.",
+      addressTitle: "NODUS address",
+      addressHint: "The client finds NODUS by itself. If it doesn't, enter this address or the IP in the client.",
+      listening: "Server is running",
+      portBusy: "Port is busy",
+      serverError: "Server is not running",
+      starting: "Starting",
+      ipList: "IP: {{ips}}",
+      myPcs: "My computers",
+      noPcs: "No computers yet. Install the client and paste the key into it.",
+      online: "online",
+      offline: "offline · {{when}}",
+      neverSeen: "offline",
+      shared: "Shared",
+      wol: "Wake-on-LAN",
+      wolWifi: "Wi-Fi",
+      paused: "Paused",
+      apps: "apps: {{count}}",
+      unpair: "Unpair",
+      unpairConfirm: "Unpair?",
+      unpaired: "Computer unpaired",
+      sharedPcs: "Shared family computers",
+      owner: "owner: {{name}}",
+      historyTitle: "Recent commands",
+      noHistory: "No commands yet.",
+      phrasesTitle: "What to say",
+      adminTitle: "All computers of the house",
+      footer: "Ghost Hands {{version}}",
+      errorPrefix: "Error: ",
+      actions: {
+        "app.launch": "Launch", "app.close": "Close", "volume.set": "Volume", "volume.change": "Volume",
+        "volume.mute": "Sound", "volume.get": "Volume", "media.key": "Media", "power.shutdown": "Shutdown",
+        "power.restart": "Restart", "power.sleep": "Sleep", "power.lock": "Lock", "power.cancel": "Cancel shutdown",
+        "display.off": "Monitor", "web.search": "Search", "toast.show": "Message", "wake": "Wake-on-LAN",
+      },
+      phrases: [
+        "launch steam", "open chrome on the laptop", "close the game", "close discord",
+        "turn up the volume on the computer", "mute the pc", "pause on the computer", "next track on the pc",
+        "search the web for cheap flights", "shut down the computer", "cancel shutdown", "lock the computer",
+        "turn on the computer", "which computers are online",
+      ],
+    },
+  };
+
+  const SKILL = location.pathname.split("/")[4] || "ghost_hands";
+  const API = `/api/v1/skills/${SKILL}/routes`;
+  const $ = (id) => document.getElementById(id);
+  let lang = "ru";
+  let texts = TEXTS.ru;
+  let me = null;
+  let revealed = "";
+  let pendingUnpair = null;
+  let pollTimer = null;
+
+  const fill = (template, vars = {}) => String(template).replace(/\{\{(\w+)\}\}/g, (_, name) => String(vars[name] ?? ""));
+  const tr = (key, vars) => fill(texts[key] ?? TEXTS.en[key] ?? key, vars);
+  const post = (type, data) => parent.postMessage({ type, data }, window.origin);
+  const notify = (level, message) => post("notify", { level, message });
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const ago = (value) => {
+    if (!value) return "";
+
+    const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+    const format = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+    const units = [["day", 86400], ["hour", 3600], ["minute", 60]];
+
+    for (const [unit, size] of units) if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
+    return format.format(seconds, "second");
+  };
+
+  async function call(path, method = "GET", body) {
+    const res = await fetch(`${API}${path}`, body === undefined
+      ? { method, credentials: "same-origin" }
+      : { method, credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 404 && data.message === "skill-not-found") {
+      $("off").hidden = false;
+      throw new Error("skill-not-found");
+    }
+    if (!res.ok || data.success === false) throw new Error(data.message || `http-${res.status}`);
+    return data.result ?? data;
+  }
+
+  function applyTexts() {
+    document.documentElement.lang = lang;
+    for (const node of document.querySelectorAll("[data-t]")) node.textContent = tr(node.dataset.t);
+    $("reveal").textContent = revealed ? tr("hide") : tr("show");
+    $("phrases").replaceChildren(...texts.phrases.map((phrase) => el("div", "", phrase)));
+    if (me) render();
+  }
+
+  function renderKey() {
+    const key = me.key || {};
+
+    $("key").value = revealed || (key.readable === false ? "" : key.masked || "");
+    $("key").placeholder = key.readable === false ? tr("keyUnreadable") : "";
+
+    const parts = [];
+
+    if (key.createdAt) parts.push(tr("keyCreated", { when: ago(key.createdAt) }));
+    if (key.lastUsedAt) parts.push(tr("keyUsed", { when: ago(key.lastUsedAt) }));
+    $("keyMeta").textContent = parts.join(" · ");
+  }
+
+  function deviceItem(device, { mine, owner } = {}) {
+    const item = el("li", "device");
+    const dot = el("span", `dot${device.online ? " on" : ""}`);
+    const body = el("div", "body");
+    const name = el("div", "name", device.name);
+    const meta = [];
+
+    if (device.shared && mine) name.append(el("span", "badge", tr("shared")));
+    if (device.wol) name.append(el("span", "badge orange", device.wolWifi ? `${tr("wol")} · ${tr("wolWifi")}` : tr("wol")));
+    if (device.paused) name.append(el("span", "badge", tr("paused")));
+
+    meta.push(device.online ? tr("online") : device.lastSeenAt ? tr("offline", { when: ago(device.lastSeenAt) }) : tr("neverSeen"));
+    if (owner) meta.push(tr("owner", { name: owner }));
+    if (typeof device.apps === "number") meta.push(tr("apps", { count: device.apps }));
+    if (device.client) meta.push(`v${device.client}`);
+
+    body.append(name, el("div", "meta", meta.join(" · ")));
+    item.append(dot, body);
+
+    if (mine) {
+      const button = el("button", "danger", pendingUnpair === device.id ? tr("unpairConfirm") : tr("unpair"));
+
+      button.addEventListener("click", () => unpair(device.id));
+      item.append(button);
+    }
+    return item;
+  }
+
+  function render() {
+    renderKey();
+
+    const server = me.server || {};
+    const state = { listening: ["listening", "ok"], "port-busy": ["portBusy", "bad"], error: ["serverError", "bad"], starting: ["starting", ""] }[server.state] || ["serverError", "bad"];
+
+    $("address").textContent = `${server.host || "project-nod.local"}:${server.port || 47300}`;
+    $("serverState").textContent = tr(state[0]);
+    $("serverState").className = `pill ${state[1]}`;
+    $("ips").textContent = server.addresses?.length ? tr("ipList", { ips: server.addresses.join(", ") }) : "";
+    $("download").href = me.downloadUrl || $("download").href;
+
+    $("devices").replaceChildren(...(me.devices.length ? me.devices.map((device) => deviceItem(device, { mine: true })) : [el("li", "empty", tr("noPcs"))]));
+
+    $("sharedCard").hidden = !me.shared.length;
+    $("shared").replaceChildren(...me.shared.map((device) => deviceItem(device, { owner: device.owner })));
+
+    $("footer").textContent = tr("footer", { version: me.version || "" });
+  }
+
+  function renderHistory(items) {
+    if (!items.length) return $("history").replaceChildren(el("li", "empty", tr("noHistory")));
+
+    $("history").replaceChildren(...items.map((entry) => {
+      const item = el("li");
+      const action = texts.actions[entry.action] || entry.action;
+      const what = [action, entry.target, entry.pc ? `· ${entry.pc}` : ""].filter(Boolean).join(" ");
+
+      item.append(el("span", "when", ago(entry.at)), el("span", "what", what), el("span", entry.ok ? "done" : "fail", entry.ok ? "✓" : entry.code || "×"));
+      return item;
+    }));
+  }
+
+  async function load() {
+    try {
+      me = await call("/me");
+      if (!me.key?.exists) {
+        await call("/key/ensure", "POST", {});
+        me = await call("/me");
+      }
+      render();
+
+      const history = await call("/history");
+
+      renderHistory(history.items || []);
+
+      if (me.isAdmin) {
+        const overview = await call("/admin/overview");
+
+        $("adminCard").hidden = false;
+        $("adminDevices").replaceChildren(...overview.devices.map((device) => deviceItem(device, { owner: device.owner })));
+      }
+    } catch (error) {
+      if (error.message !== "skill-not-found") notify("error", tr("errorPrefix") + error.message);
+    }
+  }
+
+  async function reveal() {
+    if (revealed) {
+      revealed = "";
+      applyTexts();
+      return revealed;
+    }
+    const result = await call("/key/reveal", "POST", {});
+
+    revealed = result.key;
+    applyTexts();
+    return revealed;
+  }
+
+  function copyText(text) {
+    const input = $("key");
+    const shown = input.value;
+
+    input.value = text;
+    input.focus();
+    input.select();
+    input.setSelectionRange(0, text.length);
+
+    let copied = false;
+
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    if (!revealed) input.value = shown;
+    notify(copied ? "success" : "error", copied ? tr("copied") : tr("copyFailed"));
+  }
+
+  async function unpair(id) {
+    if (pendingUnpair !== id) {
+      pendingUnpair = id;
+      render();
+      setTimeout(() => {
+        if (pendingUnpair === id) {
+          pendingUnpair = null;
+          if (me) render();
+        }
+      }, 4000);
+      return;
+    }
+    pendingUnpair = null;
+    try {
+      await call(`/devices/${encodeURIComponent(id)}`, "DELETE");
+      notify("success", tr("unpaired"));
+      await load();
+    } catch (error) {
+      notify("error", tr("errorPrefix") + error.message);
+    }
+  }
+
+  $("reveal").addEventListener("click", () => reveal().catch((error) => notify("error", tr("errorPrefix") + error.message)));
+  $("copy").addEventListener("click", async () => {
+    try {
+      copyText(revealed || (await call("/key/reveal", "POST", {})).key);
+    } catch (error) {
+      notify("error", tr("errorPrefix") + error.message);
+    }
+  });
+  $("open").addEventListener("click", async () => {
+    try {
+      const key = revealed || (await call("/key/reveal", "POST", {})).key;
+      const server = me?.server || {};
+      const link = `ghosthands://pair?key=${encodeURIComponent(key)}&host=${encodeURIComponent(server.host || "project-nod.local")}&port=${encodeURIComponent(server.port || 47300)}`;
+
+      window.open(link, "_top");
+    } catch (error) {
+      notify("error", tr("errorPrefix") + error.message);
+    }
+  });
+  $("rotate").addEventListener("click", () => $("rotateConfirm").classList.add("open"));
+  $("rotateNo").addEventListener("click", () => $("rotateConfirm").classList.remove("open"));
+  $("rotateYes").addEventListener("click", async () => {
+    $("rotateYes").disabled = true;
+    try {
+      const result = await call("/key/rotate", "POST", {});
+
+      $("rotateConfirm").classList.remove("open");
+      revealed = result.key;
+      notify("success", tr("rotated"));
+      await load();
+      applyTexts();
+    } catch (error) {
+      notify("error", tr("errorPrefix") + error.message);
+    } finally {
+      $("rotateYes").disabled = false;
+    }
+  });
+
+  // init arrives on the frame's load: subscribe right away
+  window.addEventListener("message", (event) => {
+    if (event.origin !== window.origin || event.source !== parent) return;
+
+    const { type, data } = event.data || {};
+
+    if (type === "init") {
+      lang = data?.language === "en" ? "en" : "ru";
+      texts = TEXTS[lang];
+      applyTexts();
+    }
+  });
+
+  new ResizeObserver(() => post("resize", { height: document.body.scrollHeight })).observe(document.body);
+
+  applyTexts();
+  load();
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === "visible") load();
+  }, 10000);
+  window.addEventListener("pagehide", () => clearInterval(pollTimer));
+</script>
+</body>
+</html>

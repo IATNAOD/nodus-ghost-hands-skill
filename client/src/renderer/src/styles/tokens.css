@@ -1,0 +1,31 @@
+/* Ghost Hands design tokens: dark violet, accents #ff9a4d (orange) and #ad67ff (purple) */
+:root {
+  --orange: #ff9a4d;
+  --purple: #ad67ff;
+  --brand-gradient: linear-gradient(135deg, #ad67ff 0%, #ff9a4d 100%);
+  --brand-gradient-soft: linear-gradient(135deg, rgba(173, 103, 255, 0.18) 0%, rgba(255, 154, 77, 0.14) 100%);
+
+  --bg: #120d1c;
+  --surface: #1a1328;
+  --elevated: #231a35;
+  --field: #160f22;
+  --border: #2e2345;
+  --border-hover: rgba(173, 103, 255, 0.4);
+
+  --text: #f6f1ff;
+  --text-2: #b7a9d6;
+  --muted: #7d6f9a;
+  --on-accent: #140c20;
+
+  --danger: #ff5c7a;
+  --success: var(--orange);
+
+  --glow: 0 0 24px rgba(173, 103, 255, 0.25);
+  --shadow: 0 10px 30px rgba(5, 2, 12, 0.45);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --titlebar: 40px;
+
+  --font: "Inter Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}

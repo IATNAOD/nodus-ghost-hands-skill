@@ -31,7 +31,7 @@ export interface ConnectionDeps {
 export interface Welcome {
   deviceId: string;
   name: string;
-  owner: { name: string };
+  owner: { name: string; id?: string };
   server: { version: string; protoMin: number; protoMax: number };
   /** skill settings the PC needs; also sent as a "settings" message after a change */
   settings?: SkillSettings;
@@ -99,7 +99,7 @@ export class Connection extends EventEmitter {
   }
 
   /** Polite goodbye before sleep or unpairing. */
-  bye(reason: "quit" | "sleep" | "unpair"): void {
+  bye(reason: "quit" | "sleep" | "unpair" | "shutdown"): void {
     this.send(MSG.BYE, { reason });
   }
 

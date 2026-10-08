@@ -15,7 +15,7 @@ export default defineConfig({
   },
   preload: {
     build: {
-      rollupOptions: { input: { index: resolve(__dirname, "src/preload/index.ts") } },
+      rollupOptions: { input: { index: resolve(__dirname, "src/preload/index.ts"), parental: resolve(__dirname, "src/preload/parental.ts") } },
     },
   },
   renderer: {
@@ -27,6 +27,8 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "src/renderer/index.html"),
           overlay: resolve(__dirname, "src/renderer/overlay.html"),
+          notice: resolve(__dirname, "src/renderer/notice.html"),
+          lock: resolve(__dirname, "src/renderer/lock.html"),
         },
         output: { manualChunks: (id) => (id.includes("node_modules") ? "vendor" : undefined) },
       },

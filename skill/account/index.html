@@ -69,6 +69,30 @@
   .phrases div::before { content: "«"; color: var(--purple); }
   .phrases div::after { content: "»"; color: var(--purple); }
   .warning { border-color: rgba(255, 92, 122, .45); }
+  .pc { display: grid; border-radius: 12px; background: var(--field); border: 1px solid var(--border); }
+  .pc > .device { border: 0; background: transparent; }
+  .parental { display: grid; gap: 14px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+  .parental .head { display: flex; align-items: center; gap: 10px; }
+  .parental .head span { flex: 1; font-weight: 600; font-size: 13px; }
+  .parental .body { display: grid; gap: 14px; }
+  .switch { width: 40px; height: 22px; flex: none; padding: 0; border: 0; border-radius: 99px; background: #3a2d55; position: relative; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--text); transition: transform .15s; }
+  .switch[aria-checked="true"] { background: var(--gradient); }
+  .switch[aria-checked="true"]::after { transform: translateX(18px); background: var(--on-accent); }
+  .pblock { display: grid; gap: 8px; }
+  .pblock h3 { font-size: 13px; font-weight: 650; color: var(--text-2); }
+  .pgrid { display: grid; grid-template-columns: auto auto auto; gap: 8px 16px; align-items: center; justify-content: start; font-size: 13px; }
+  .pgrid .label { color: var(--text-2); }
+  .num { width: 58px; padding: 6px 8px; color: var(--text); background: #140c20; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+  .num:focus, .pin:focus { outline: none; border-color: var(--purple); }
+  .pin { width: 150px; padding: 8px 10px; color: var(--text); background: #140c20; border: 1px solid var(--border); border-radius: 8px; font: 600 14px/1 inherit; letter-spacing: .15em; }
+  .stat { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; }
+  .stat b { font-weight: 650; }
+  .games { max-height: 240px; overflow: auto; display: grid; gap: 2px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 10px; background: #140c20; }
+  .games label { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; }
+  .games input { accent-color: var(--purple); }
+  .games .tag { color: var(--muted); font-size: 11px; }
+  .note { font-size: 12px; color: var(--orange); }
   .confirm { display: none; padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 92, 122, .45); background: rgba(255, 92, 122, .06); gap: 10px; }
   .confirm.open { display: grid; }
   [hidden] { display: none !important; }
@@ -223,18 +247,69 @@
       adminTitle: "Все компьютеры дома",
       footer: "Ghost Hands {{version}}",
       errorPrefix: "Ошибка: ",
+      parental: "Родительский контроль",
+      parentalHint: "Снять ограничения сможете только вы: кнопками здесь, голосом (NODUS узнаёт вас по голосу) или PIN на самом компьютере. Привязывайте компьютер ребёнка своим ключом, а ребёнку оставьте обычную учётную запись Windows, без прав администратора.",
+      parentalOffline: "Компьютер не в сети: изменения применятся, когда он подключится.",
+      parentalOutdated: "Клиент Ghost Hands на этом компьютере устарел и не знает родительского контроля. Обновите его.",
+      today: "Сегодня",
+      pcTime: "Компьютер",
+      gamesTime: "Игры",
+      usedOf: "{{used}} из {{limit}}",
+      usedNoLimit: "{{used}}, без лимита",
+      extendsUsed: "Продлений: компьютер {{pc}}, игры {{games}}",
+      lockedPc: "Время за компьютером вышло",
+      lockedGames: "Время игр вышло",
+      grantedUntil: "Ограничения сняты до {{time}}",
+      lift: "Снять ограничения:",
+      liftFor: "на {{time}}",
+      liftDay: "до конца дня",
+      revoke: "Вернуть ограничения",
+      resetToday: "Сбросить время за сегодня",
+      limitsTitle: "Лимиты времени",
+      limitsHint: "Пустое поле — без лимита. Выходные — суббота и воскресенье.",
+      weekday: "Будни",
+      weekend: "Выходные",
+      hoursShort: "ч",
+      minutesShort: "мин",
+      extendTitle: "Продление по кнопке",
+      extendHint: "За 10 минут до конца лимита на компьютере появится предупреждение с кнопкой продления.",
+      extendMinutes: "минут",
+      extendTimes: "раз в день",
+      unlockTitle: "PIN и голос снимают ограничения на",
+      pinTitle: "PIN",
+      pinHint: "6–12 цифр. С PIN на компьютере можно снять ограничения или привязать его заново.",
+      pinSet: "PIN задан",
+      pinNotSet: "PIN не задан",
+      pinSave: "Задать PIN",
+      gamesTitle: "Что считается игрой",
+      gamesHint: "Игры из Steam, Epic и GOG отмечены сами. Отметьте, что ещё считать игрой.",
+      gamesEmpty: "Список появится, когда компьютер пришлёт свои приложения.",
+      gamesFilter: "Найти",
+      game: "игра",
+      save: "Сохранить",
+      saved: "Сохранено",
+      durHM: "{{h}} ч {{m}} мин",
+      durH: "{{h}} ч",
+      durM: "{{m}} мин",
+      "error.pin-format": "PIN — от 6 до 12 цифр.",
+      "error.pin-weak": "Слишком простой PIN: без повторов и цифр подряд.",
+      "error.minutes-invalid": "Неверное время.",
+      "error.not-found": "Компьютер не найден.",
       actions: {
         "app.launch": "Запуск", "app.close": "Закрытие", "volume.set": "Громкость", "volume.change": "Громкость",
-        "volume.mute": "Звук", "volume.get": "Громкость", "media.key": "Медиа", "power.shutdown": "Выключение",
-        "power.restart": "Перезагрузка", "power.sleep": "Сон", "power.lock": "Блокировка", "power.cancel": "Отмена выключения",
-        "display.off": "Монитор", "web.search": "Поиск", "toast.show": "Сообщение", "wake": "Включение по сети",
+        "volume.mute": "Звук", "volume.get": "Громкость", "media.key": "Медиа", "media.control": "Медиа", "window.close": "Закрытие окна",
+        "power.shutdown": "Выключение", "power.restart": "Перезагрузка", "power.sleep": "Сон", "power.lock": "Блокировка",
+        "power.cancel": "Отмена выключения", "display.off": "Монитор", "web.search": "Поиск", "toast.show": "Сообщение",
+        "wake": "Включение по сети", "parental.on": "Родительский контроль включён", "parental.off": "Родительский контроль выключен",
+        "parental.pin": "PIN изменён", "parental.grant": "Ограничения сняты", "parental.revoke": "Ограничения возвращены",
+        "parental.reset": "Время за сегодня сброшено",
       },
       phrases: [
         "запусти доту", "открой стим на ноутбуке", "закрой игру", "закрой хром",
-        "сделай громче на компьютере", "громкость на компьютере тридцать", "выключи звук на компьютере",
-        "пауза на компьютере", "следующий трек на компьютере", "найди в интернете рецепт борща",
+        "закрой активное окно", "сделай громче на компьютере", "громкость на компьютере тридцать", "выключи звук на компьютере",
+        "пауза на компьютере", "продолжи на компьютере", "следующий трек на компьютере", "найди в интернете рецепт борща",
         "выключи компьютер", "выключи компьютер через час", "отмени выключение", "заблокируй компьютер",
-        "включи компьютер", "какие компьютеры в сети",
+        "включи компьютер", "какие компьютеры в сети", "сними ограничения на детском компьютере на час",
       ],
     },
     en: {
@@ -287,17 +362,68 @@
       adminTitle: "All computers of the house",
       footer: "Ghost Hands {{version}}",
       errorPrefix: "Error: ",
+      parental: "Parental control",
+      parentalHint: "Only you can lift the limits: with the buttons here, by voice (NODUS knows your voice) or with the PIN on the computer itself. Pair the child's computer with your key, and give the child a standard Windows account without admin rights.",
+      parentalOffline: "The computer is offline: changes apply when it connects.",
+      parentalOutdated: "The Ghost Hands client on this computer is too old for parental control. Update it.",
+      today: "Today",
+      pcTime: "Computer",
+      gamesTime: "Games",
+      usedOf: "{{used}} of {{limit}}",
+      usedNoLimit: "{{used}}, no limit",
+      extendsUsed: "Extensions: computer {{pc}}, games {{games}}",
+      lockedPc: "Computer time is over",
+      lockedGames: "Game time is over",
+      grantedUntil: "Limits lifted until {{time}}",
+      lift: "Lift the limits:",
+      liftFor: "for {{time}}",
+      liftDay: "until the end of the day",
+      revoke: "Bring the limits back",
+      resetToday: "Reset today's time",
+      limitsTitle: "Time limits",
+      limitsHint: "An empty field means no limit. The weekend is Saturday and Sunday.",
+      weekday: "Weekdays",
+      weekend: "Weekend",
+      hoursShort: "h",
+      minutesShort: "min",
+      extendTitle: "Extension by a button",
+      extendHint: "10 minutes before the limit the computer shows a notice with the extension button.",
+      extendMinutes: "minutes",
+      extendTimes: "times a day",
+      unlockTitle: "The PIN and the voice lift the limits for",
+      pinTitle: "PIN",
+      pinHint: "6-12 digits. With the PIN the limits can be lifted on the computer, or it can be paired again.",
+      pinSet: "PIN is set",
+      pinNotSet: "No PIN",
+      pinSave: "Set the PIN",
+      gamesTitle: "What counts as a game",
+      gamesHint: "Steam, Epic and GOG games are marked already. Mark what else counts as a game.",
+      gamesEmpty: "The list appears when the computer sends its apps.",
+      gamesFilter: "Find",
+      game: "game",
+      save: "Save",
+      saved: "Saved",
+      durHM: "{{h}} h {{m}} min",
+      durH: "{{h}} h",
+      durM: "{{m}} min",
+      "error.pin-format": "The PIN is 6 to 12 digits.",
+      "error.pin-weak": "The PIN is too simple: no repeats and no runs of digits.",
+      "error.minutes-invalid": "Wrong time.",
+      "error.not-found": "The computer isn't found.",
       actions: {
         "app.launch": "Launch", "app.close": "Close", "volume.set": "Volume", "volume.change": "Volume",
-        "volume.mute": "Sound", "volume.get": "Volume", "media.key": "Media", "power.shutdown": "Shutdown",
-        "power.restart": "Restart", "power.sleep": "Sleep", "power.lock": "Lock", "power.cancel": "Cancel shutdown",
-        "display.off": "Monitor", "web.search": "Search", "toast.show": "Message", "wake": "Wake-on-LAN",
+        "volume.mute": "Sound", "volume.get": "Volume", "media.key": "Media", "media.control": "Media", "window.close": "Window closed",
+        "power.shutdown": "Shutdown", "power.restart": "Restart", "power.sleep": "Sleep", "power.lock": "Lock",
+        "power.cancel": "Cancel shutdown", "display.off": "Monitor", "web.search": "Search", "toast.show": "Message",
+        "wake": "Wake-on-LAN", "parental.on": "Parental control on", "parental.off": "Parental control off",
+        "parental.pin": "PIN changed", "parental.grant": "Limits lifted", "parental.revoke": "Limits back",
+        "parental.reset": "Today's time reset",
       },
       phrases: [
-        "launch steam", "open chrome on the laptop", "close the game", "close discord",
-        "turn up the volume on the computer", "mute the pc", "pause on the computer", "next track on the pc",
+        "launch steam", "open chrome on the laptop", "close the game", "close the active window", "close discord",
+        "turn up the volume on the computer", "mute the pc", "pause on the computer", "resume on the computer", "next track on the pc",
         "search the web for cheap flights", "shut down the computer", "cancel shutdown", "lock the computer",
-        "turn on the computer", "which computers are online",
+        "turn on the computer", "which computers are online", "lift the limits on the kids computer for an hour",
       ],
     },
   };
@@ -369,8 +495,7 @@
     $("keyMeta").textContent = parts.join(" · ");
   }
 
-  function deviceItem(device, { mine, owner } = {}) {
-    const item = el("li", "device");
+  function fillDevice(item, device, { mine, owner } = {}) {
     const dot = el("span", `dot${device.online ? " on" : ""}`);
     const body = el("div", "body");
     const name = el("div", "name", device.name);
@@ -386,7 +511,7 @@
     if (device.client) meta.push(`v${device.client}`);
 
     body.append(name, el("div", "meta", meta.join(" · ")));
-    item.append(dot, body);
+    item.replaceChildren(dot, body);
 
     if (mine) {
       const button = el("button", "danger", pendingUnpair === device.id ? tr("unpairConfirm") : tr("unpair"));
@@ -395,6 +520,324 @@
       item.append(button);
     }
     return item;
+  }
+
+  const deviceItem = (device, options) => fillDevice(el("li", "device"), device, options);
+
+  /* ── parental control in "My computers": only the owner's own PCs ── */
+
+  // the nodes of my PCs stay between polls: a field being typed in keeps its text and focus
+  const pcNodes = new Map();
+  const parentalViews = new Map();
+
+  const pad = (value) => String(value).padStart(2, "0");
+  const todayKey = () => {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  };
+  const dur = (seconds) => {
+    const minutes = Math.max(0, Math.round(seconds / 60));
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+
+    return h ? tr(m ? "durHM" : "durH", { h, m }) : tr("durM", { m });
+  };
+  const clockOf = (value) => new Date(value).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
+  const errorText = (error) => texts[`error.${error.message}`] ?? tr("errorPrefix") + error.message;
+  const button = (className, text, onClick) => {
+    const node = el("button", className, text);
+
+    node.type = "button";
+    node.addEventListener("click", onClick);
+    return node;
+  };
+  const num = (min, max, step = 1) => {
+    const input = el("input", "num");
+
+    Object.assign(input, { type: "number", min, max, step });
+    return input;
+  };
+  const block = (title, ...children) => {
+    const node = el("div", "pblock");
+
+    node.append(el("h3", "", title), ...children);
+    return node;
+  };
+  const line = (...children) => {
+    const node = el("div", "row");
+
+    node.append(...children);
+    return node;
+  };
+
+  async function loadParental() {
+    try {
+      const result = await call("/parental");
+
+      parentalViews.clear();
+      for (const view of result.devices || []) parentalViews.set(view.id, view);
+    } catch (error) {
+      if (error.message === "skill-not-found") throw error;
+    }
+  }
+
+  async function parentalCall(panel, path, method, body, { clean = false } = {}) {
+    try {
+      const view = await call(`/parental/${encodeURIComponent(panel.id)}${path}`, method, body);
+
+      parentalViews.set(panel.id, view);
+      if (clean) panel.dirty = false;
+      updatePanel(panel, view);
+      return true;
+    } catch (error) {
+      notify("error", errorText(error));
+      return false;
+    }
+  }
+
+  function createPanel(id) {
+    const panel = { id, dirty: false, appsKey: "", fields: {} };
+    const root = el("div", "parental");
+    const head = el("div", "head");
+    const toggle = button("switch", undefined, () => parentalCall(panel, "", "PUT", { enabled: toggle.getAttribute("aria-checked") !== "true" }));
+
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-label", tr("parental"));
+    head.append(el("span", "", tr("parental")), toggle);
+
+    // today: what is used, what is lifted, the buttons
+    const stat = el("div", "stat");
+    const badges = el("div", "row");
+    const revoke = button("ghost", tr("revoke"), () => parentalCall(panel, "/revoke", "POST", {}));
+    const actions = line(el("span", "hint", tr("lift")));
+
+    for (const hours of [1, 2, 4]) actions.append(button("secondary", tr("liftFor", { time: dur(hours * 3600) }), () => parentalCall(panel, "/grant", "POST", { minutes: hours * 60 })));
+    actions.append(
+      button("secondary", tr("liftDay"), () => parentalCall(panel, "/grant", "POST", { minutes: "day" })),
+      revoke,
+      button("ghost", tr("resetToday"), () => parentalCall(panel, "/reset-today", "POST", {})),
+    );
+
+    // PIN: set here, checked on the PC; never shown back
+    const pinState = el("span", "hint");
+    const pin = el("input", "pin");
+    const pinSave = button("secondary", tr("pinSave"), async () => {
+      pinSave.disabled = true;
+      if (await parentalCall(panel, "/pin", "PUT", { pin: pin.value })) {
+        pin.value = "";
+        notify("success", tr("saved"));
+      } else {
+        pinSave.disabled = false;
+      }
+    });
+
+    Object.assign(pin, { type: "password", inputMode: "numeric", autocomplete: "new-password", maxLength: 12 });
+    pin.addEventListener("input", () => {
+      pin.value = pin.value.replace(/\D/g, "");
+      pinSave.disabled = pin.value.length < 6;
+    });
+    pinSave.disabled = true;
+
+    // limits for weekdays and the weekend: hours and minutes, empty - no limit
+    const limits = el("div", "pgrid");
+
+    limits.append(el("span"), el("span", "label", tr("pcTime")), el("span", "label", tr("gamesTime")));
+    for (const day of ["weekday", "weekend"]) {
+      limits.append(el("span", "label", tr(day)));
+      for (const kind of ["pc", "games"]) {
+        const hours = num(0, 24);
+        const minutes = num(0, 59, 5);
+
+        panel.fields[`${day}.${kind}`] = [hours, minutes];
+        limits.append(line(hours, el("span", "hint", tr("hoursShort")), minutes, el("span", "hint", tr("minutesShort"))));
+      }
+    }
+
+    const extend = el("div", "pgrid");
+
+    extend.append(el("span"), el("span", "label", tr("pcTime")), el("span", "label", tr("gamesTime")));
+    for (const [field, label] of [["minutes", "extendMinutes"], ["times", "extendTimes"]]) {
+      extend.append(el("span", "label", tr(label)));
+      for (const kind of ["pc", "games"]) {
+        const input = field === "minutes" ? num(5, 120, 5) : num(0, 10);
+
+        panel.fields[`extend.${kind}.${field}`] = input;
+        extend.append(input);
+      }
+    }
+
+    const unlock = num(15, 720, 15);
+    const unlockRow = line(el("span", "label", tr("unlockTitle")), unlock, el("span", "hint", tr("minutesShort")));
+
+    // what counts as a game: the PC's apps, Steam/Epic/GOG games marked already
+    const games = el("div", "games");
+    const filter = el("input", "num");
+
+    filter.style.width = "200px";
+    filter.placeholder = tr("gamesFilter");
+    filter.addEventListener("input", () => {
+      const needle = filter.value.trim().toLowerCase();
+
+      for (const item of games.children) item.hidden = Boolean(needle) && !(item.dataset.name ?? "").includes(needle);
+    });
+
+    const save = button("primary", tr("save"), async () => {
+      save.disabled = true;
+      if (await parentalCall(panel, "", "PUT", { rules: readRules(panel) }, { clean: true })) notify("success", tr("saved"));
+      else save.disabled = false;
+    });
+    const markDirty = () => {
+      panel.dirty = true;
+      save.disabled = false;
+    };
+
+    for (const node of [limits, extend, unlockRow, games]) {
+      node.addEventListener("input", markDirty);
+      node.addEventListener("change", markDirty);
+    }
+    save.disabled = true;
+
+    const note = el("p", "note");
+    const body = el("div", "body");
+
+    body.append(
+      el("p", "hint", tr("parentalHint")),
+      note,
+      block(tr("today"), stat, badges, actions),
+      block(tr("pinTitle"), line(pin, pinSave, pinState), el("p", "hint", tr("pinHint"))),
+      block(tr("limitsTitle"), limits, el("p", "hint", tr("limitsHint"))),
+      block(tr("extendTitle"), extend, el("p", "hint", tr("extendHint"))),
+      unlockRow,
+      block(tr("gamesTitle"), el("p", "hint", tr("gamesHint")), filter, games),
+      line(save),
+    );
+    root.append(head, body);
+    Object.assign(panel, { root, toggle, body, note, stat, badges, revoke, pinState, unlock, games, save });
+    return panel;
+  }
+
+  function updatePanel(panel, view) {
+    panel.root.hidden = !view;
+    if (!view) return;
+
+    panel.toggle.setAttribute("aria-checked", String(view.enabled));
+    // the settings are shown only while the control is on
+    panel.body.hidden = !view.enabled;
+    if (!view.enabled) return;
+
+    panel.note.textContent = view.outdated ? tr("parentalOutdated") : view.online ? "" : tr("parentalOffline");
+    panel.note.hidden = !panel.note.textContent;
+
+    const { rules } = view;
+    const usage = view.usage && view.usage.day === todayKey() ? view.usage : { pcSec: 0, gameSec: 0, extended: { pc: 0, games: 0 }, locked: null };
+    const today = rules.limits[[0, 6].includes(new Date().getDay()) ? "weekend" : "weekday"];
+    const used = (title, seconds, baseMin, extended, extend) => {
+      const node = el("span");
+      const limit = baseMin === null ? null : baseMin + extended * extend.minutes;
+
+      node.append(el("b", "", `${title}: `), limit === null ? tr("usedNoLimit", { used: dur(seconds) }) : tr("usedOf", { used: dur(seconds), limit: dur(limit * 60) }));
+      return node;
+    };
+
+    panel.stat.replaceChildren(
+      used(tr("pcTime"), usage.pcSec, today.pcMin, usage.extended.pc, rules.extend.pc),
+      used(tr("gamesTime"), usage.gameSec, today.gamesMin, usage.extended.games, rules.extend.games),
+      el("span", "hint", tr("extendsUsed", { pc: `${usage.extended.pc}/${rules.extend.pc.times}`, games: `${usage.extended.games}/${rules.extend.games.times}` })),
+    );
+
+    const badges = view.grantUntil
+      ? [el("span", "badge orange", tr("grantedUntil", { time: clockOf(view.grantUntil) }))]
+      : usage.locked ? [el("span", "badge", tr(usage.locked === "pc" ? "lockedPc" : "lockedGames"))] : [];
+
+    panel.badges.replaceChildren(...badges);
+    panel.badges.hidden = !badges.length;
+    panel.revoke.hidden = !view.grantUntil;
+    panel.pinState.textContent = view.pinSet ? tr("pinSet") : tr("pinNotSet");
+
+    if (!panel.dirty) fillRules(panel, view);
+  }
+
+  function fillRules(panel, view) {
+    const { rules } = view;
+
+    for (const day of ["weekday", "weekend"]) {
+      for (const kind of ["pc", "games"]) {
+        const [hours, minutes] = panel.fields[`${day}.${kind}`];
+        const value = rules.limits[day][kind === "pc" ? "pcMin" : "gamesMin"];
+
+        hours.value = value === null ? "" : String(Math.floor(value / 60));
+        minutes.value = value === null ? "" : String(value % 60);
+      }
+    }
+    for (const kind of ["pc", "games"]) {
+      panel.fields[`extend.${kind}.minutes`].value = String(rules.extend[kind].minutes);
+      panel.fields[`extend.${kind}.times`].value = String(rules.extend[kind].times);
+    }
+    panel.unlock.value = String(rules.unlockMinutes);
+
+    const key = JSON.stringify([view.apps, rules.games]);
+
+    if (key !== panel.appsKey) {
+      const add = new Set(rules.games.add);
+      const remove = new Set(rules.games.remove);
+      const apps = [...view.apps].sort((a, b) => Number(b.game) - Number(a.game) || a.name.localeCompare(b.name));
+
+      panel.appsKey = key;
+      panel.games.replaceChildren(...(apps.length ? apps.map((app) => {
+        const label = el("label");
+        const box = el("input");
+
+        Object.assign(box, { type: "checkbox", value: app.id, checked: (app.game && !remove.has(app.id)) || add.has(app.id) });
+        box.dataset.game = app.game ? "1" : "";
+        label.dataset.name = app.name.toLowerCase();
+        label.append(box, el("span", "", app.name));
+        if (app.game) label.append(el("span", "tag", tr("game")));
+        return label;
+      }) : [el("p", "hint", tr("gamesEmpty"))]));
+    }
+    panel.save.disabled = true;
+  }
+
+  function readRules(panel) {
+    const minutesOf = ([hours, minutes]) => (hours.value === "" && minutes.value === "" ? null : Math.min(1440, (Number(hours.value) || 0) * 60 + (Number(minutes.value) || 0)));
+    const day = (name) => ({ pcMin: minutesOf(panel.fields[`${name}.pc`]), gamesMin: minutesOf(panel.fields[`${name}.games`]) });
+    const extend = (kind) => ({ minutes: Number(panel.fields[`extend.${kind}.minutes`].value) || 15, times: Number(panel.fields[`extend.${kind}.times`].value) || 0 });
+    const add = [];
+    const remove = [];
+
+    for (const box of panel.games.querySelectorAll("input[type=checkbox]")) {
+      if (box.checked && !box.dataset.game) add.push(box.value);
+      if (!box.checked && box.dataset.game) remove.push(box.value);
+    }
+    return { limits: { weekday: day("weekday"), weekend: day("weekend") }, extend: { pc: extend("pc"), games: extend("games") }, unlockMinutes: Number(panel.unlock.value) || 120, games: { add, remove } };
+  }
+
+  function renderMine() {
+    const list = $("devices");
+
+    if (!me.devices.length) {
+      pcNodes.clear();
+      list.replaceChildren(el("li", "empty", tr("noPcs")));
+      return;
+    }
+
+    const items = me.devices.map((device) => {
+      let node = pcNodes.get(device.id);
+
+      if (!node) {
+        node = { item: el("li", "pc"), row: el("div", "device"), panel: createPanel(device.id) };
+        node.item.append(node.row, node.panel.root);
+        pcNodes.set(device.id, node);
+      }
+      fillDevice(node.row, device, { mine: true });
+      updatePanel(node.panel, parentalViews.get(device.id));
+      return node.item;
+    });
+
+    for (const id of [...pcNodes.keys()]) if (!me.devices.some((device) => device.id === id)) pcNodes.delete(id);
+    // the same PCs in the same order: the nodes are left in place
+    if (items.length !== list.children.length || items.some((item, i) => list.children[i] !== item)) list.replaceChildren(...items);
   }
 
   function render() {
@@ -409,7 +852,7 @@
     $("ips").textContent = server.addresses?.length ? tr("ipList", { ips: server.addresses.join(", ") }) : "";
     $("download").href = me.downloadUrl || $("download").href;
 
-    $("devices").replaceChildren(...(me.devices.length ? me.devices.map((device) => deviceItem(device, { mine: true })) : [el("li", "empty", tr("noPcs"))]));
+    renderMine();
 
     $("sharedCard").hidden = !me.shared.length;
     $("shared").replaceChildren(...me.shared.map((device) => deviceItem(device, { owner: device.owner })));
@@ -423,7 +866,11 @@
     $("history").replaceChildren(...items.map((entry) => {
       const item = el("li");
       const action = texts.actions[entry.action] || entry.action;
-      const what = [action, entry.target, entry.pc ? `· ${entry.pc}` : ""].filter(Boolean).join(" ");
+      // "parental.grant" keeps minutes or "day"
+      const target = entry.action === "parental.grant" && entry.target
+        ? entry.target === "day" ? tr("liftDay") : Number(entry.target) ? tr("liftFor", { time: dur(Number(entry.target) * 60) }) : entry.target
+        : entry.target;
+      const what = [action, target, entry.pc ? `· ${entry.pc}` : ""].filter(Boolean).join(" ");
 
       item.append(el("span", "when", ago(entry.at)), el("span", "what", what), el("span", entry.ok ? "done" : "fail", entry.ok ? "✓" : entry.code || "×"));
       return item;
@@ -437,6 +884,7 @@
         await call("/key/ensure", "POST", {});
         me = await call("/me");
       }
+      await loadParental();
       render();
 
       const history = await call("/history");
@@ -556,6 +1004,8 @@
     if (type === "init") {
       lang = data?.language === "en" ? "en" : "ru";
       texts = TEXTS[lang];
+      // the panels are built with the texts of their language
+      pcNodes.clear();
       applyTexts();
     }
   });

@@ -139,14 +139,15 @@ const UNIT_SECONDS = {
 
 /**
  * Delay "через 30 минут", "через полчаса", "через полтора часа", "через час и 10 минут",
- * "in 5 minutes", "in an hour", "in half an hour".
+ * "in 5 minutes", "in an hour", "in half an hour". With `starts` ["на", "for"] - a duration:
+ * "на час", "на 30 минут", "for an hour".
  * @returns {{ sec: number, start: number, end: number } | null}
  */
-const findDelay = (words) => {
+const findDelay = (words, starts = ["через", "in", "after"]) => {
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
 
-    if (word !== "через" && word !== "in" && word !== "after") continue;
+    if (!starts.includes(word)) continue;
 
     let j = i + 1;
     let sec = 0;
@@ -278,6 +279,12 @@ const APP_WORDS = new Set([
   "app", "application", "program", "software",
 ]);
 const WINDOW_WORDS = new Set(["окно", "окна", "window"]);
+/** "активную программу", "текущее окно", "the active window": the one in front */
+const ACTIVE_WORDS = new Set([
+  "активную", "активное", "активный", "активная", "активной",
+  "текущую", "текущее", "текущий", "текущая", "текущей",
+  "active", "current", "focused",
+]);
 
 /** Conjunctions that join several objects: "стим и дискорд", "steam and discord". */
 const AND_WORDS = new Set(["и", "and", ",", "а", "плюс", "plus"]);
@@ -342,6 +349,7 @@ module.exports = {
   FILLERS,
   DETERMINERS,
   GAME_WORDS,
+  ACTIVE_WORDS,
   APP_WORDS,
   WINDOW_WORDS,
   AND_WORDS,

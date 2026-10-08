@@ -27,6 +27,9 @@
   <ItemGroup>
     <!-- Build-only: provides net48 reference assemblies for `dotnet build`. Not a runtime dependency. -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- Build-only: WinRT projections for media sessions (Windows.Media.Control). Nothing is shipped:
+         Windows.Media.Control is part of Windows 10 1809+, System.Runtime.WindowsRuntime (AsTask) of .NET Framework. -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.1" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
 </Project>

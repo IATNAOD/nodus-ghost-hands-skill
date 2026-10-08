@@ -1,8 +1,8 @@
 import { shell, Notification } from "electron";
-import { ACTIONS, isFeatureEnabled, MEDIA_KEYS, LIMITS } from "@skill/protocol.js";
+import { ACTIONS, isFeatureEnabled, MEDIA_KEYS, MEDIA_OPS, LIMITS } from "@skill/protocol.js";
 import log from "../log";
 import { HelperError } from "../system/helper";
-import { launchApp, closeApp, ok, fail, type AppDeps, type Result } from "./apps";
+import { launchApp, closeApp, closeForeground, ok, fail, type AppDeps, type Result } from "./apps";
 import type { PowerControl, PowerAction } from "./power";
 
 const SEARCH: Record<string, string> = {
@@ -44,6 +44,7 @@ export class Dispatcher {
   constructor(
     private deps: AppDeps,
     private power: PowerControl,
+    private parental?: { blocksLaunch(app: { id: string; kind: string }): boolean },
   ) {}
 
   async handle(command: Command): Promise<Result> {
@@ -62,6 +63,23 @@ export class Dispatcher {
     }
   }
 
+  /**
+   * Play and pause through Windows media sessions; a player outside them (or Windows before
+   * 1809) gets the media key, which only toggles: then the answer says `fallback`.
+   */
+  private async mediaControl(op: string): Promise<Result> {
+    try {
+      return ok(await this.deps.helper.call<Record<string, unknown>>("media.control", { op }));
+    } catch (error) {
+      const code = error instanceof HelperError ? error.code : "internal";
+
+      if (code === "no-session") return fail("no-session");
+      if (code !== "unsupported" && code !== "refused") throw error;
+      await this.deps.helper.call("media.key", { key: op === "next" || op === "prev" ? op : "play_pause" });
+      return ok({ fallback: true });
+    }
+  }
+
   private async run(action: string, args: Record<string, unknown>, timeoutMs: number): Promise<Result> {
     const { helper, store } = this.deps;
     const delaySec = num(args.delaySec, 0, 86400) ?? 0;
@@ -70,11 +88,17 @@ export class Dispatcher {
       case "app.launch": {
         const app = typeof args.appId === "string" ? this.deps.catalog.get(args.appId) : undefined;
 
-        return app ? launchApp(this.deps, app) : fail("app-not-found");
+        if (!app) return fail("app-not-found");
+        // time is over under parental control
+        if (this.parental?.blocksLaunch(app)) return fail("parental-limit");
+        return launchApp(this.deps, app);
       }
       case "app.close":
         // the answer must reach the skill in time: finding the processes takes a moment too
+        if (args.target === "foreground" && args.force !== true) return closeForeground(this.deps, {}, Math.min(4000, Math.max(1500, timeoutMs - 2500)));
         return closeApp(this.deps, args, Math.min(5000, Math.max(1500, timeoutMs - 2500)));
+      case "window.close":
+        return closeForeground(this.deps, args, Math.min(4000, Math.max(1500, timeoutMs - 2500)));
       case "volume.get":
         return ok(await helper.call("volume.get"));
       case "volume.set": {
@@ -89,6 +113,8 @@ export class Dispatcher {
       }
       case "volume.mute":
         return typeof args.muted === "boolean" ? ok(await helper.call("volume.mute", { muted: args.muted })) : fail("invalid-args");
+      case "media.control":
+        return MEDIA_OPS.includes(args.op as string) ? this.mediaControl(String(args.op)) : fail("invalid-args");
       case "media.key":
         return MEDIA_KEYS.includes(args.key as string) ? ok(await helper.call("media.key", { key: args.key })) : fail("invalid-args");
       case "power.cancel":

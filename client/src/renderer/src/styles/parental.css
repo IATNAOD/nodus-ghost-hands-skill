@@ -1,0 +1,186 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+body {
+  font: 14px/1.5 var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font: 600 13px/1.2 var(--font);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.primary {
+  color: var(--on-accent);
+  background: var(--brand-gradient);
+}
+
+.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.secondary {
+  color: var(--text);
+  background: transparent;
+  border: 1px solid rgba(173, 103, 255, 0.6);
+}
+
+.ghost,
+.link {
+  color: var(--text-2);
+  background: transparent;
+  padding: 6px 8px;
+}
+
+.link {
+  justify-self: start;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.muted-on-accent {
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.pin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pin input {
+  width: 140px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--text);
+  font: 600 15px/1 var(--font);
+  letter-spacing: 0.2em;
+}
+
+.pin .error {
+  flex-basis: 100%;
+}
+
+/* ── the notice in the corner ── */
+
+.notice {
+  box-sizing: border-box;
+  height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid rgba(173, 103, 255, 0.5);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(173, 103, 255, 0.22), transparent 55%),
+    radial-gradient(circle at 100% 100%, rgba(255, 154, 77, 0.16), transparent 50%),
+    var(--bg);
+}
+
+.notice-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.notice-head svg {
+  color: var(--orange);
+  flex: none;
+}
+
+/* ── the lock over everything ── */
+
+.lock {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(173, 103, 255, 0.25), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(255, 154, 77, 0.18), transparent 45%),
+    var(--bg);
+}
+
+.lock-card {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  max-width: 560px;
+  padding: 32px;
+  text-align: center;
+}
+
+.lock-card h1 {
+  margin: 8px 0 0;
+  font-size: 28px;
+  line-height: 1.2;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lock-card .primary {
+  padding: 12px 22px;
+  font-size: 15px;
+}
+
+.lock-card .pin {
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

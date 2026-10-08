@@ -7,9 +7,9 @@
 
 const clone = (value) => (value === null || value === undefined ? value : JSON.parse(JSON.stringify(value)));
 
-/** @param {{ Keys: object, Devices: object, History?: object }} models mongoose models from ctx.models */
+/** @param {{ Keys: object, Devices: object, History?: object, Parental?: object }} models mongoose models from ctx.models */
 const createStore = (models) => {
-  const { Keys, Devices, History } = models;
+  const { Keys, Devices, History, Parental } = models;
 
   return {
     keys: {
@@ -48,6 +48,17 @@ const createStore = (models) => {
       add: (entry) => (History ? History.create(entry).then(() => undefined) : Promise.resolve()),
       recent: (userId, limit = 30) => (History ? History.find({ userId: String(userId) }).sort({ at: -1 }).limit(limit).lean() : Promise.resolve([])),
     },
+
+    parental: {
+      all: () => (Parental ? Parental.find({}).lean() : Promise.resolve([])),
+      byDevice: (deviceId) => (Parental ? Parental.findOne({ deviceId }).lean() : Promise.resolve(null)),
+      /** Owner changes bump `rev`; usage from the client does not. */
+      save: (deviceId, fields, { bump = true } = {}) =>
+        Parental
+          ? Parental.updateOne({ deviceId }, { $set: { ...fields, updatedAt: new Date() }, ...(bump ? { $inc: { rev: 1 } } : {}) }, { upsert: true })
+          : Promise.resolve(),
+      remove: (deviceId) => (Parental ? Parental.deleteOne({ deviceId }) : Promise.resolve()),
+    },
   };
 };
 
@@ -56,9 +67,10 @@ const createMemoryStore = () => {
   const keys = new Map();
   const devices = new Map();
   const history = [];
+  const parental = new Map();
 
   return {
-    _data: { keys, devices, history },
+    _data: { keys, devices, history, parental },
 
     keys: {
       byUser: async (userId) => clone(withoutSecret(keys.get(String(userId)))) ?? null,
@@ -109,6 +121,21 @@ const createMemoryStore = () => {
         history.length = Math.min(history.length, 500);
       },
       recent: async (userId, limit = 30) => history.filter((entry) => entry.userId === String(userId)).slice(0, limit).map(clone),
+    },
+
+    parental: {
+      all: async () => [...parental.values()].map(clone),
+      byDevice: async (deviceId) => clone(parental.get(deviceId)) ?? null,
+      save: async (deviceId, fields, { bump = true } = {}) => {
+        const record = parental.get(deviceId) ?? { deviceId, enabled: false, rules: null, pin: null, usage: null, grantUntil: null, resetAt: null, rev: 0 };
+
+        Object.assign(record, clone(fields), { updatedAt: new Date() });
+        if (bump) record.rev = (record.rev ?? 0) + 1;
+        parental.set(deviceId, record);
+      },
+      remove: async (deviceId) => {
+        parental.delete(deviceId);
+      },
     },
   };
 };

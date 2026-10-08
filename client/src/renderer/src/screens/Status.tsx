@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock, Download, History, Plug, PlugZap, Power, RefreshCw, WifiOff } from "lucide-react";
-import type { ConnectionStatus, UiState } from "../../../shared/types";
+import { AlertTriangle, CheckCircle2, Clock, Download, History, Plug, PlugZap, Power, RefreshCw, ShieldCheck, WifiOff } from "lucide-react";
+import type { ConnectionStatus, ParentalView, UiState } from "../../../shared/types";
 import { fill, useTexts, type Texts } from "../i18n";
 import { Button, Card, SwitchRow } from "../ui";
 
@@ -47,6 +47,37 @@ const newer = (a: string, b: string): boolean => {
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
   return false;
 };
+
+const duration = (t: Texts, seconds: number): string => {
+  const minutes = Math.max(0, Math.ceil(seconds / 60));
+
+  if (minutes < 60) return fill(t.durM, { m: minutes });
+  return fill(minutes % 60 ? t.durHM : t.durH, { h: Math.floor(minutes / 60), m: minutes % 60 });
+};
+
+/** Time left today on the PC and in games, or "limits lifted until 18:00". */
+function ParentalCard({ parental }: { parental: ParentalView }) {
+  const t = useTexts();
+  const meter = (title: string, left: number | null) => (
+    <div className={`meter${left !== null && left <= 0 ? " over" : ""}`}>
+      <span className="hint">{title}</span>
+      <strong>{left === null ? t.parentalNoLimit : left <= 0 ? t.parentalOver : fill(t.parentalLeft, { time: duration(t, left) })}</strong>
+    </div>
+  );
+
+  return (
+    <Card title={t.parentalTitle} icon={<ShieldCheck />} className="parental-card">
+      {parental.granted && parental.grantUntil ? (
+        <p className="hint">{fill(t.parentalGranted, { time: time(parental.grantUntil) })}</p>
+      ) : (
+        <div className="meters">
+          {meter(t.parentalPc, parental.pcLeftSec)}
+          {meter(t.parentalGames, parental.gamesLeftSec)}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export function Status({ state }: { state: UiState }) {
   const t = useTexts();
@@ -149,8 +180,16 @@ export function Status({ state }: { state: UiState }) {
         </div>
       )}
 
+      {state.parental.enabled && <ParentalCard parental={state.parental} />}
+
       <Card>
-        <SwitchRow title={t.pause} hint={t.pauseHint} checked={state.prefs.paused} onChange={(paused) => window.gh.setPrefs({ paused })} />
+        <SwitchRow
+          title={t.pause}
+          hint={state.parental.enabled ? t.parentalPauseOff : t.pauseHint}
+          disabled={state.parental.enabled}
+          checked={state.prefs.paused}
+          onChange={(paused) => window.gh.setPrefs({ paused })}
+        />
       </Card>
 
       <Card title={t.recentTitle} icon={<History />}>

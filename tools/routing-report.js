@@ -49,6 +49,9 @@ const demoIndex = () => {
     config: { name: "Ноутбук", aliases: ["рабочий"], apps: apps([["start:chrome", "Google Chrome", ["хром"]], ["start:word", "Microsoft Word", ["ворд"]]]) },
   });
   index.setState("d1", { running: [{ key: "exe:dota2", name: "Dota 2", appId: "steam:570", game: true, fg: true }] });
+  // the kids' PC under parental control
+  index.upsert({ deviceId: "d3", userId: "u1", config: { name: "Детский", aliases: [], apps: [] }, online: true });
+  index.setParental("d3", true);
 
   return index;
 };
@@ -73,6 +76,10 @@ const CASES = [
   ["выйди из доты", "close_app"],
   ["close discord", "close_app"],
   ["quit the game", "close_app"],
+  ["закрой активную программу", "close_app"],
+  ["закрой активное окно", "close_app"],
+  ["закрой текущее приложение", "close_app"],
+  ["close the active window", "close_app"],
   ["выключи компьютер", "pc_power"],
   ["выключи игровой", "pc_power"],
   ["перезагрузи ноутбук через полчаса", "pc_power"],
@@ -98,23 +105,40 @@ const CASES = [
   ["пауза на компьютере", "pc_media"],
   ["следующий трек на компьютере", "pc_media"],
   ["next track on the pc", "pc_media"],
+  ["продолжи на компьютере", "pc_media"],
+  ["сними с паузы на компьютере", "pc_media"],
+  ["включи музыку на компьютере", "pc_media"],
+  ["resume on the computer", "pc_media"],
+  ["поставь на паузу на компьютере", "pc_media"],
   ["найди в интернете рецепт борща", "pc_search"],
   ["загугли погоду в сочи", "pc_search"],
   ["найди на ютубе обзор айфона", "pc_search"],
   ["search the web for cheap flights", "pc_search"],
   ["какие компьютеры в сети", "pc_status"],
+  ["сними ограничения на детском компьютере на час", "pc_parental"],
+  ["отключи родительский контроль на компьютере", "pc_parental"],
+  ["верни ограничения на детском компьютере", "pc_parental"],
+  ["сбрось лимиты на детском компьютере", "pc_parental"],
+  ["разреши еще поиграть на детском компьютере", "pc_parental"],
+  ["отключи родительский контроль на компьютере на 2 часа", "pc_parental"],
+  ["сними лимиты до конца дня", "pc_parental"],
+  ["включи родительский контроль снова", "pc_parental"],
+  ["lift the limits on the kids computer for an hour", "pc_parental"],
+  ["bring back the limits on the pc", "pc_parental"],
   ["что запущено на компьютере", "pc_status"],
   ["which computers are online", "pc_status"],
   // NODUS keeps these
   ["включи свет", null],
   ["выключи свет на кухне", null],
   ["открой шторы", null],
+  ["закрой окно", null],
   ["закрой шторы", null],
   ["сделай громче", null],
   ["выключи звук", null],
   ["пауза", null],
   ["следующий трек", null],
   ["включи музыку", null],
+  ["продолжи", null],
   ["запусти таймер на пять минут", null],
   ["отмени таймер", null],
   ["запусти сценарий уборка", null],

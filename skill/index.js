@@ -14,6 +14,7 @@ const { readSettings, loadedConfigs } = require("./lib/settings");
 const { ScenarioEvents } = require("./lib/events");
 const { Deferred } = require("./lib/deferred");
 const { RecentChoices } = require("./lib/select");
+const { ParentalService } = require("./lib/parental");
 const state = require("./lib/state");
 const { trace } = require("./lib/trace");
 const wol = require("./lib/wol");
@@ -36,6 +37,7 @@ class GhostHands {
     this.server = null;
     this.events = null;
     this.deferred = null;
+    this.parental = null;
     this.recent = new RecentChoices();
     this.configs = [];
     this.settings = readSettings([]);
@@ -64,7 +66,19 @@ class GhostHands {
       log: trace,
       version: manifest.version,
       onEvent: (type, data) => this.onHubEvent(type, data),
+      parental: (deviceId) => this.parental?.payload(deviceId) ?? { enabled: false, rev: 0 },
     });
+    this.parental = new ParentalService({
+      store: this.store,
+      hub: this.hub,
+      index: this.index,
+      events: this.events,
+      log: trace,
+      t: (key, vars) => this.ctx.t(key, vars),
+      // the owner may be away: the alert waits for their voice up to a day
+      notify: (userId, text) => this.notify(userId, text, { undeliveredAfterMin: 120, expiresInMin: 1440 }),
+    });
+    await this.parental.init();
     this.server = new Server({ hub: this.hub, log: trace });
     this.applyMatchSettings(this.settings);
 
@@ -99,9 +113,20 @@ class GhostHands {
       switch (type) {
         case "online":
           this.events.online(data.device, data.lastSeenAt);
+          this.parental.online(data.device);
           break;
         case "offline":
           this.events.offline(data.device);
+          this.parental.offline(data.device, data.reason);
+          break;
+        case "removed":
+          this.parental.remove(data.deviceId).catch((error) => trace(`parental: ${error.message}`));
+          break;
+        case "parental-usage":
+          this.parental.usage(data.device, data.usage);
+          break;
+        case "parental-alert":
+          this.parental.alert(data.device, data.kind, { until: data.until });
           break;
         case "config":
           this.deferred.ready(data.device.deviceId);
@@ -131,7 +156,7 @@ class GhostHands {
   }
 
   /** Say something to a person when they can hear it (permission notify). */
-  async notify(userId, text) {
+  async notify(userId, text, options = {}) {
     if (typeof this.ctx?.notify !== "function" || !text) return;
 
     try {
@@ -143,6 +168,7 @@ class GhostHands {
         source: this.ctx.skillId,
         undeliveredAfterMin: 10,
         expiresInMin: 30,
+        ...options,
       });
     } catch (error) {
       trace(`notify: ${error.message}`);
@@ -156,6 +182,7 @@ class GhostHands {
 
     this.events?.dispose();
     this.deferred?.dispose();
+    this.parental?.dispose();
 
     try {
       await this.hub?.dispose();

@@ -14,6 +14,7 @@ const { stemWord } = require("./nodus-routing");
 const BUILTIN = require("./nodus-builtin");
 
 const SCORES = Object.freeze({
+  parental: 36,
   volume: 36,
   media: 36,
   power: 34,
@@ -83,11 +84,18 @@ const MIN = new Set(["минимум", "минимальную", "минимал
 const HALF = new Set(["половину", "половина", "половины", "half"]);
 const PERCENT = new Set(["%", "процент", "процента", "процентов", "percent"]);
 
+// op - what the client does through Windows media sessions; key - the media key for older clients
 const MEDIA = [
-  { key: "play_pause", words: new Set(["пауза", "паузу", "паузе", "продолжи", "продолжай", "возобнови", "pause", "resume", "unpause"]) },
-  { key: "next", words: new Set(["следующий", "следующую", "следующее", "следующая", "дальше", "next", "skip"]) },
-  { key: "prev", words: new Set(["предыдущий", "предыдущую", "предыдущее", "предыдущая", "previous", "prev"]) },
+  { op: "pause", key: "play_pause", words: new Set(["пауза", "паузу", "паузе", "останови", "приостанови", "pause"]) },
+  { op: "play", key: "play_pause", words: new Set(["продолжи", "продолжай", "возобнови", "resume", "unpause"]) },
+  { op: "next", key: "next", words: new Set(["следующий", "следующую", "следующее", "следующая", "дальше", "next", "skip"]) },
+  { op: "prev", key: "prev", words: new Set(["предыдущий", "предыдущую", "предыдущее", "предыдущая", "previous", "prev"]) },
 ];
+const RESUME_PHRASES = split(["сними с паузы", "снять с паузы", "сними паузу", "убери паузу", "continue playing"]);
+// "включи музыку на компьютере", "play on the pc", "stop the music on the pc": the verb and
+// media words only - "play minecraft on the pc" is a launch
+const PLAY_VERBS = new Map([["включи", "play"], ["поставь", "play"], ["play", "play"], ["continue", "play"], ["stop", "pause"]]);
+const MEDIA_OBJECTS = new Set(["музыку", "музыка", "видео", "трек", "песню", "воспроизведение", "фильм", "ролик", "music", "video", "track", "song", "playback", "it", "the"]);
 
 const SEARCH_VERBS = split(["найди", "найти", "поищи", "поискать", "ищи", "загугли", "погугли", "гугли", "search for", "search", "google", "look up", "look for", "find"]);
 const GOOGLE_VERBS = new Set(["загугли", "погугли", "гугли", "google"]);
@@ -258,15 +266,25 @@ function volumeRule({ words, index, pool }) {
 }
 
 function mediaRule({ words, index, pool }) {
-  const media = MEDIA.find((entry) => words.some((word) => entry.words.has(word)));
-
-  if (!media) return null;
-
   const mentions = pcMentions(words, index, pool);
 
   if (!mentions.length) return null;
 
-  return { intent: "pc_media", score: SCORES.media, params: { op: media.key, key: media.key, pc: pcSummary(bestMention(mentions), words) } };
+  let rest = words;
+
+  for (const mention of [...mentions].sort((a, b) => b.from - a.from)) rest = removeRange(rest, mention.from, mention.to);
+
+  const verbOnly = PLAY_VERBS.has(rest[0]) && rest.slice(1).every((word) => MEDIA_OBJECTS.has(word) || T.LOCATIVE_PREPS.has(word));
+  // "включи на компьютере" with no media word is a launch or a wake
+  const op = findPhrase(words, RESUME_PHRASES)
+    ? "play"
+    : MEDIA.find((entry) => words.some((word) => entry.words.has(word)))?.op ?? (verbOnly && (rest.length > 1 || /^[a-z]/.test(rest[0])) ? PLAY_VERBS.get(rest[0]) : null);
+
+  if (!op) return null;
+
+  const key = op === "next" || op === "prev" ? op : "play_pause";
+
+  return { intent: "pc_media", score: SCORES.media, params: { op, key, pc: pcSummary(bestMention(mentions), words) } };
 }
 
 function searchRule({ words, index, pool }) {
@@ -409,8 +427,18 @@ function wakeRule({ words, index, pool }) {
   return { intent: "pc_wake", score: SCORES.wake, params: { op: "wake", pc: pcSummary(object.mention, object.words) } };
 }
 
-/** Generic object: "игру" → game, "программу" → app, "окно" → window. */
+/**
+ * Generic object: "игру" → game, "программу" → app, "окно" → window;
+ * "активную программу", "текущее окно", "active window" → active (the window in front),
+ * "активную игру" → game (the game in front goes first anyway).
+ */
 const genericOf = (object) => {
+  if (object.length === 2 && T.ACTIVE_WORDS.has(object[0])) {
+    if (T.GAME_WORDS.has(object[1])) return "game";
+    if (T.APP_WORDS.has(object[1]) || T.WINDOW_WORDS.has(object[1])) return "active";
+
+    return null;
+  }
   if (object.length !== 1) return null;
   if (T.GAME_WORDS.has(object[0])) return "game";
   if (T.APP_WORDS.has(object[0])) return "app";
@@ -433,8 +461,10 @@ function closeRule({ words, index, pool }) {
   const generic = objects.length === 1 ? genericOf(objects[0]) : null;
 
   if (generic) {
+    // a bare "окно" is the smart home's (a window, blinds) unless a PC is named
     if (generic === "window" && !pc) return null;
-    params.generic = generic;
+    // "программу", "окно на компьютере", "активное приложение": the window in front
+    params.generic = generic === "game" ? "game" : "active";
     params.objects = [];
 
     return { intent: "close_app", score: SCORES.closeGeneric, params };
@@ -500,7 +530,50 @@ function launchRule({ words, index, pool }) {
   return null;
 }
 
-const RULES = [volumeRule, mediaRule, searchRule, powerRule, wakeRule, closeRule, launchRule];
+/* ── parental control: «сними ограничения на детском компьютере на час» ── */
+
+const LIMIT_WORDS = new Set([
+  "ограничения", "ограничение", "ограничений", "лимит", "лимиты", "лимитов", "лимита",
+  "limits", "limit", "restrictions", "restriction",
+]);
+const PARENTAL_PHRASES = split(["родительский контроль", "родительского контроля", "parental control", "parental controls"]);
+const PLAY_MORE = split(["разреши еще поиграть", "разреши поиграть", "дай еще поиграть", "дай поиграть", "let him play", "let her play"]);
+const PARENTAL_OPS = [
+  { op: "reset", verbs: split(["сбрось", "сбросить", "обнули", "обнулить", "reset"]) },
+  { op: "grant", verbs: split(["сними", "снять", "убери", "убрать", "отключи", "отключить", "выключи", "выключить", "отмени", "lift", "remove", "turn off", "disable", "switch off"]) },
+  { op: "revoke", verbs: split(["верни", "вернуть", "включи", "включить", "восстанови", "восстановить", "turn on", "enable", "switch on", "bring back", "restore"]) },
+];
+const WHOLE_DAY = split(["до конца дня", "на весь день", "на сегодня", "на день", "for today", "for the day", "for the rest of the day"]);
+
+/** "на час", "на 30 минут", "до конца дня" → minutes or "day"; null - the owner's default. */
+const durationOf = (words) => {
+  if (findPhrase(words, WHOLE_DAY)) return "day";
+
+  const span = T.findDelay(words, ["на", "for"]);
+
+  return span ? Math.max(1, Math.round(span.sec / 60)) : null;
+};
+
+// first among the rules: «отключи родительский контроль на компьютере» is not a shutdown.
+// Every PC under control in the house counts, not only the speaker's: a child asking gets
+// "only the owner can" from the handler, which checks the owner by voice.
+function parentalRule({ words, index }) {
+  const pool = index ? index.all().filter((device) => device.parental) : [];
+
+  if (!pool.length) return null;
+
+  const playMore = phraseAtStart(words, PLAY_MORE);
+  const about = playMore || words.some((word) => LIMIT_WORDS.has(word)) || findPhrase(words, PARENTAL_PHRASES);
+  const op = playMore ? "grant" : about ? PARENTAL_OPS.find((entry) => phraseAtStart(words, entry.verbs))?.op : null;
+
+  if (!op) return null;
+
+  const pc = bestMention(pcMentions(words, index, pool));
+
+  return { intent: "pc_parental", score: SCORES.parental, params: { op, minutes: op === "grant" ? durationOf(words) : null, pc: pcSummary(pc, words) } };
+}
+
+const RULES = [parentalRule, volumeRule, mediaRule, searchRule, powerRule, wakeRule, closeRule, launchRule];
 
 /**
  * Which of our intents a phrase belongs to.

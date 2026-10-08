@@ -970,3 +970,38 @@ dialog.modal::backdrop {
     transition: none !important;
   }
 }
+
+/* ── parental control: read-only screens ── */
+
+.locked-area {
+  display: contents;
+}
+
+.locked-area:disabled .input,
+.locked-area:disabled .select,
+.locked-area:disabled .chips {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.parental-card .meters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.parental-card .meter {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.parental-card .meter strong {
+  font-size: 18px;
+}
+
+.parental-card .meter.over strong {
+  color: var(--danger);
+}

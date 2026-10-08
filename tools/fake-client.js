@@ -1,6 +1,7 @@
 // fake-client.js - a pretend PC for the skill's WebSocket server (Node 22, ws from the root package).
 //   node tools/fake-client.js --key GH-XXXX-... [--host 127.0.0.1] [--port 47300] [--name Игровой] [--shared]
 // Sends hello, a config with a few apps and the state; prints every command and answers it.
+// Parental control: prints the rules it gets and reports an hour on the PC, 20 minutes in games.
 "use strict";
 
 const os = require("os");
@@ -39,7 +40,19 @@ let deviceId = arg("device-id", null);
 let rev = 1;
 let backoff = 1000;
 
-const state = () => ({ running: [...pc.running.values()], volume: pc.volume, muted: pc.muted, shutdownAt: pc.shutdownAt });
+const today = () => {
+  const now = new Date();
+
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+let parental = { enabled: false };
+const state = () => ({
+  running: [...pc.running.values()],
+  volume: pc.volume,
+  muted: pc.muted,
+  shutdownAt: pc.shutdownAt,
+  parental: parental.enabled ? { day: today(), pcSec: 3600, gameSec: 1200, extended: { pc: 1, games: 0 }, locked: null } : undefined,
+});
 
 function handle(ws, message) {
   const { id, action, args = {} } = message;
@@ -78,6 +91,16 @@ function handle(ws, message) {
       pc.shutdownAt = Date.now() + (args.delaySec || 15) * 1000;
       ws.send(P.encode(P.MSG.STATE, { data: state() }));
       return reply({ ok: true, data: { at: pc.shutdownAt } });
+    case "window.close": {
+      const target = [...pc.running.values()].find((item) => item.fg) ?? [...pc.running.values()][0];
+
+      if (!target) return reply({ ok: false, code: "not-running" });
+      pc.running.delete(target.key);
+      ws.send(P.encode(P.MSG.STATE, { data: state() }));
+      return reply({ ok: true, data: { name: target.name, closed: [1], pending: [] } });
+    }
+    case "media.control":
+      return reply({ ok: true, data: { op: args.op } });
     case "power.cancel": {
       const cancelled = Boolean(pc.shutdownAt);
 
@@ -97,7 +120,7 @@ function connect() {
   ws.on("error", (error) => console.error(`! ${error.message}`));
   ws.on("open", () => {
     backoff = 1000;
-    ws.send(P.encode(P.MSG.HELLO, { proto: P.PROTO, key, deviceId, device: { name, aliases: [], machineHash, os: "Windows 10 (fake)", host: os.hostname(), client: "0.0.0-fake" } }));
+    ws.send(P.encode(P.MSG.HELLO, { proto: P.PROTO, key, deviceId, device: { name, aliases: [], machineHash, os: "Windows 10 (fake)", host: os.hostname(), client: "0.0.0-fake", caps: P.CAPS } }));
   });
   ws.on("message", (raw) => {
     const message = P.decode(raw);
@@ -115,6 +138,11 @@ function connect() {
         break;
       case P.MSG.CMD:
         handle(ws, message);
+        break;
+      case P.MSG.PARENTAL:
+        parental = message;
+        console.log(`✓ parental ${message.enabled ? "on" : "off"} rev ${message.rev}${message.grantUntil ? ` lifted until ${new Date(message.grantUntil).toLocaleTimeString()}` : ""} ${JSON.stringify(message.rules ?? {})}${message.pin ? " pin set" : ""}`);
+        ws.send(P.encode(P.MSG.STATE, { data: state() }));
         break;
       case P.MSG.LEARN:
         console.log(`✓ learned «${message.alias}» for ${message.appId}`);

@@ -72,6 +72,8 @@ export class Updater extends EventEmitter {
   install(): void {
     if (this.state.status !== "ready") return;
     log.info(`installing ${this.state.version}`);
+    // a client under parental control may quit only for this
+    this.emit("install");
     // silent install, then start the new version
     autoUpdater.quitAndInstall(true, true);
   }

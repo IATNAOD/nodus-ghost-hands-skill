@@ -8,7 +8,10 @@ import { ACCEPT } from "@skill/names.js";
 import { NameIndex } from "@skill/name-index.js";
 import { classify } from "@skill/parse.js";
 import log from "./log";
-import { setLanguage, t } from "./i18n";
+import { getLanguage, setLanguage, t } from "./i18n";
+import { ParentalController } from "./parental";
+import { ParentalStore } from "./parental/store";
+import { createParentalWindows, type ParentalWindows } from "./parental/windows";
 import { SettingsStore } from "./settings/store";
 import { SecureStore } from "./settings/secure";
 import type { Settings } from "./settings/defaults";
@@ -53,6 +56,13 @@ const systemLanguage = (): Language => (app.getLocale().toLowerCase().startsWith
  * Everything the client does, behind one object: the window, the tray and the
  * IPC handlers only call it and listen to "state".
  */
+const CLIENT_CAPS = ["window.close", "media.control", "parental"];
+/** Under parental control nothing of these changes on the PC: the owner sets it in the panel. */
+const LOCKED_METHODS = new Set([
+  "setDevice", "setServer", "setApp", "addApp", "removeApp", "addStartApps", "pickExecutable", "rescan",
+  "setFeatures", "setPrefs", "setUi", "unpair", "testLaunch",
+]);
+
 export class Core extends EventEmitter {
   store!: SettingsStore;
   secure!: SecureStore;
@@ -62,6 +72,8 @@ export class Core extends EventEmitter {
   power!: PowerControl;
   dispatcher!: Dispatcher;
   connection!: Connection;
+  parental!: ParentalController;
+  parentalWindows!: ParentalWindows;
   updater: Updater | null = null;
 
   private warnings = new Map<string, { alias: string; code: string }[]>();
@@ -95,7 +107,16 @@ export class Core extends EventEmitter {
     this.catalog = new Catalog(this.helper, this.store);
     this.running = new RunningMonitor(this.helper, this.catalog);
     this.power = new PowerControl(this.helper, this.store, this.overlay);
-    this.dispatcher = new Dispatcher({ helper: this.helper, catalog: this.catalog, running: this.running, store: this.store }, this.power);
+    this.parentalWindows = createParentalWindows({ language: getLanguage });
+    this.parental = new ParentalController({
+      store: new ParentalStore(dir),
+      running: this.running,
+      helper: this.helper,
+      windows: this.parentalWindows,
+      sendAlert: (kind, extra) => this.connection.isOnline() && this.connection.send(MSG.ALERT, { kind, ...extra }),
+      report: () => this.scheduleState(),
+    });
+    this.dispatcher = new Dispatcher({ helper: this.helper, catalog: this.catalog, running: this.running, store: this.store }, this.power, this.parental);
     this.connection = new Connection({
       getKey: () => this.secure.getKey(),
       getServer: () => this.store.get().server,
@@ -107,10 +128,13 @@ export class Core extends EventEmitter {
         os: osName(),
         host: os.hostname(),
         client: app.getVersion(),
+        // newer actions and messages this client understands (protocol CAPS)
+        caps: CLIENT_CAPS,
       }),
     });
 
     this.wire();
+    await this.parental.init();
     this.helper.start();
 
     if (await this.secure.getKey()) this.connection.start();
@@ -154,6 +178,12 @@ export class Core extends EventEmitter {
         draft.device.id = null;
         draft.paired = null;
       }, { skill: false });
+      // unpaired by the owner in the panel: parental control goes with it
+      this.parental.drop().catch((error) => log.warn(`parental: ${(error as Error).message}`));
+    });
+    this.parental.on("change", () => {
+      this.emit("ui");
+      this.emitState();
     });
 
     const wake = () => {
@@ -223,6 +253,7 @@ export class Core extends EventEmitter {
         volume: this.volume?.level ?? null,
         muted: this.volume?.muted ?? null,
         shutdownAt: this.power.shutdownAt(),
+        parental: this.parental.report(),
       },
     });
   }
@@ -239,6 +270,9 @@ export class Core extends EventEmitter {
     this.nameError = null;
     this.skill.version = typeof welcome.server?.version === "string" ? welcome.server.version : null;
     this.applySkillSettings(welcome.settings);
+    this.parental.setOwner(typeof welcome.owner?.id === "string" ? welcome.owner.id : null);
+    // "the client was killed" waited for NODUS
+    this.parental.flushAlerts();
     this.wol = await wolInfo(this.helper, this.connection.localAddress);
     this.sendConfig();
     this.sendState();
@@ -276,6 +310,9 @@ export class Core extends EventEmitter {
       }
       case MSG.SETTINGS:
         this.applySkillSettings(message as SkillSettings);
+        return;
+      case MSG.PARENTAL:
+        await this.parental.apply(message);
         return;
       case MSG.LEARN: {
         const appId = String(message.appId ?? "");
@@ -352,6 +389,7 @@ export class Core extends EventEmitter {
       log: this.log,
       helper: { ok: this.helper.ok, error: this.helper.lastError },
       skill: { ...this.skill },
+      parental: this.parental.view(),
     };
   }
 
@@ -525,6 +563,8 @@ export class Core extends EventEmitter {
     const handler = this.api[method as keyof typeof this.api] as ((...values: unknown[]) => Promise<unknown>) | undefined;
 
     if (typeof handler !== "function") throw new Error(`unknown method ${String(method)}`);
+    // the renderer disables these controls; the check is here, where it cannot be skipped
+    if (this.parental.enabled && LOCKED_METHODS.has(method)) throw new Error("parental-locked");
 
     return handler(...args);
   }
@@ -535,6 +575,8 @@ export class Core extends EventEmitter {
 
     if (!key) return { ok: false, code: "bad-key" };
     if (!name || name.length > LIMITS.deviceName) return { ok: false, code: "bad-name" };
+    // a PC under parental control is paired again (to any account) only with the PIN
+    if (this.parental.enabled && !(await this.parental.checkPin(String(request.pin ?? "")))) return { ok: false, code: "parental-pin" };
 
     this.store.update(
       (draft: Settings) => {
@@ -658,7 +700,8 @@ export class Core extends EventEmitter {
   applyAutostart(): void {
     if (!app.isPackaged) return;
 
-    app.setLoginItemSettings({ openAtLogin: this.store.get().ui.autostart, path: process.execPath, args: ["--hidden"] });
+    // under parental control the client always starts with Windows
+    app.setLoginItemSettings({ openAtLogin: this.store.get().ui.autostart || Boolean(this.parental?.enabled), path: process.execPath, args: ["--hidden"] });
   }
 
   /** Feature flags and prefs for the tray menu */
@@ -667,11 +710,14 @@ export class Core extends EventEmitter {
   }
 
   togglePause(): void {
+    if (this.parental.enabled) return;
     this.api.setPrefs({ paused: !this.paused }).catch(() => undefined);
   }
 
-  async shutdown(): Promise<void> {
-    this.connection.bye("quit");
+  /** @param reason "shutdown" - Windows ends the session: not a reason to worry the owner */
+  async shutdown(reason: "quit" | "shutdown" = "quit"): Promise<void> {
+    this.connection.bye(reason);
+    await this.parental.dispose();
     this.connection.stop(this.connection.status);
     this.power.dispose();
     this.catalog.dispose();

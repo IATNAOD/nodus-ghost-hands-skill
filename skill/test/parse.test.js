@@ -41,7 +41,19 @@ test("close: generic game, running apps, window only with a PC", () => {
   assert.equal(parse("выключи игру").params.generic, "game");
   assert.equal(parse("закрой доту").intent, "close_app");
   assert.equal(parse("закрой окно"), null);
-  assert.equal(parse("закрой окно на компьютере").params.generic, "window");
+  assert.equal(parse("закрой окно на компьютере").params.generic, "active");
+});
+
+test("close: the active program, window or game - without naming the PC", () => {
+  for (const phrase of ["закрой активную программу", "закрой текущее приложение", "закрой активное окно", "закрой эту программу", "закрой программу", "close the active window", "close the current app"]) {
+    const parsed = parse(phrase);
+
+    assert.equal(parsed?.intent, "close_app", phrase);
+    assert.equal(parsed.params.generic, "active", phrase);
+  }
+  assert.equal(parse("закрой текущую игру").params.generic, "game");
+  // an adjective alone is not a program
+  assert.equal(parse("закрой активную вкладку")?.params?.generic ?? null, null);
 });
 
 test("power: operations, delays and clock times", () => {
@@ -100,4 +112,22 @@ test("nobody's PCs: launch and close are not taken", () => {
 test("conditions belong to base/conditional", () => {
   assert.equal(parse("если игра запустится выключи свет"), null);
   assert.equal(parse("когда компьютер включится запусти стим"), null);
+});
+
+test("parental: the operation and how long", () => {
+  const params = (text) => {
+    const parsed = parse(text);
+
+    return parsed?.intent === "pc_parental" ? [parsed.params.op, parsed.params.minutes ?? null] : null;
+  };
+
+  assert.deepEqual(params("сними ограничения на детском компьютере на час"), ["grant", 60]);
+  assert.deepEqual(params("отключи родительский контроль на компьютере на 2 часа"), ["grant", 120]);
+  assert.deepEqual(params("сними лимиты до конца дня"), ["grant", "day"]);
+  assert.deepEqual(params("разреши еще поиграть на детском компьютере"), ["grant", null]);
+  assert.deepEqual(params("lift the limits on the kids computer for an hour"), ["grant", 60]);
+  assert.deepEqual(params("верни ограничения на детском компьютере"), ["revoke", null]);
+  assert.deepEqual(params("включи родительский контроль снова"), ["revoke", null]);
+  assert.deepEqual(params("bring back the limits on the pc"), ["revoke", null]);
+  assert.deepEqual(params("сбрось лимиты на детском компьютере"), ["reset", null]);
 });

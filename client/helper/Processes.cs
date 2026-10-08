@@ -126,6 +126,15 @@ namespace GhostHelper
         }
 
         // ---- protection checks ----
+        // One process by its image name: the shell, system processes, the helper, Ghost Hands.
+        internal static bool IsProtectedProcess(int pid, int selfPid, int parentPid)
+        {
+            if (pid <= 4 || pid == selfPid || pid == parentPid) return true;
+            string path = GetImagePath(pid);
+            if (path == null) return false;
+            return Protected.Contains(Path.GetFileNameWithoutExtension(path));
+        }
+
         private static bool IsProtected(int pid, int selfPid, int parentPid, Dictionary<int, string> names)
         {
             if (pid <= 4) return true;
@@ -248,15 +257,18 @@ namespace GhostHelper
             var rows = Snapshot();
             var names = NameMap(rows);
 
-            // Expand to descendants when tree=true.
+            // Expand to descendants when tree=true. A protected process (the shell, system
+            // processes, Ghost Hands) is not expanded and not crossed: the children of
+            // explorer.exe are everything started from the Start menu and the taskbar.
+            Func<int, bool> isProtected = pid => IsProtected(pid, selfPid, parentPid, names);
             var toKill = new List<int>();
             var seen = new HashSet<int>();
             foreach (int pid in pids)
             {
                 if (seen.Add(pid)) toKill.Add(pid);
-                if (tree)
+                if (tree && !isProtected(pid))
                 {
-                    foreach (int child in Descendants(pid, rows))
+                    foreach (int child in Descendants(pid, rows, isProtected))
                         if (seen.Add(child)) toKill.Add(child);
                 }
             }
@@ -296,7 +308,8 @@ namespace GhostHelper
         private static Dictionary<string, object> Fail(int pid, string code) =>
             new Dictionary<string, object> { ["pid"] = pid, ["code"] = code };
 
-        private static IEnumerable<int> Descendants(int root, List<ProcRow> rows)
+        // Children, grandchildren...; a protected process and everything under it is skipped.
+        private static IEnumerable<int> Descendants(int root, List<ProcRow> rows, Func<int, bool> skip)
         {
             var children = new Dictionary<int, List<int>>();
             foreach (var r in rows)
@@ -316,7 +329,7 @@ namespace GhostHelper
                     foreach (int k in kids)
                     {
                         // Guard against ppid reuse cycles.
-                        if (visited.Add(k)) { result.Add(k); stack.Push(k); }
+                        if (visited.Add(k) && !skip(k)) { result.Add(k); stack.Push(k); }
                     }
                 }
             }

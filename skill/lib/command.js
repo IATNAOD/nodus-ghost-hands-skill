@@ -33,7 +33,7 @@ const SLOW_MS = 4000;
 const ERROR_KEYS = new Set([
   "offline", "timeout", "disconnected", "feature-disabled", "paused", "app-not-found", "launcher-missing",
   "launch-failed", "needs-elevation", "cancelled", "not-running", "close-timeout", "helper-unavailable",
-  "no-audio-device", "invalid-args", "unknown-action", "busy",
+  "no-audio-device", "invalid-args", "unknown-action", "busy", "parental-limit",
 ]);
 
 /* ── helpers ── */
@@ -317,9 +317,12 @@ async function closeFlow(env, params) {
     if (!choice.ok) return choice.answer;
 
     const device = choice.devices[0];
-    const result = await send(env, actor, device, "app.close", { target: game ? "game" : "foreground" }, params.generic);
+    // the window in front, like Alt+F4: a newer client closes exactly that window
+    const action = !game && env.hub.supports?.(device.deviceId, "window.close") ? "window.close" : "app.close";
+    const args = action === "window.close" ? {} : { target: game ? "game" : "foreground" };
+    const result = await send(env, actor, device, action, args, params.generic);
 
-    return closeAnswer(env, actor, device, choice.pool, result, { target: game ? "game" : "foreground" }, null);
+    return closeAnswer(env, actor, device, choice.pool, result, args, null, { action, generic: game ? "game" : "active" });
   }
 
   const objects = (Array.isArray(params.objects) ? params.objects : []).filter((object) => typeof object === "string" && object.trim()).slice(0, 3);
@@ -359,9 +362,15 @@ async function closeFlow(env, params) {
   return closeAnswer(env, actor, device, choice.pool, result, args, target.name);
 }
 
-async function closeAnswer(env, actor, device, pool, result, args, name) {
+async function closeAnswer(env, actor, device, pool, result, args, name, { action = "app.close", generic = null } = {}) {
   if (!result.ok) {
-    if (result.code === "not-running") return t(env, name ? "intents.close_app.not_running" : "intents.close_app.no_game", { name: name ?? "", pc: device.name });
+    if (result.code === "not-running") {
+      const key = name ? "intents.close_app.not_running" : generic === "active" ? "intents.close_app.no_active" : "intents.close_app.no_game";
+
+      return t(env, key, { name: name ?? "", pc: device.name });
+    }
+    // the desktop or Explorer is in front: never closed
+    if (result.code === "protected") return t(env, "intents.close_app.shell_active", { pc: device.name });
 
     if (result.code === "ambiguous" && Array.isArray(result.data?.options) && result.data.options.length) {
       const options = result.data.options.slice(0, 3).filter((option) => option && typeof option.key === "string");
@@ -394,7 +403,9 @@ async function closeAnswer(env, actor, device, pool, result, args, name) {
 
     if (answer !== "yes") return t(env, answer === "silence" ? "common.not_heard" : "intents.close_app.kept", { name: closedName });
 
-    const forced = await send(env, actor, device, "app.close", { ...args, force: true }, closedName);
+    // window.close forces only the process of that window
+    const pid = Number.isInteger(result.data?.pid) ? { pid: result.data.pid } : {};
+    const forced = await send(env, actor, device, action, { ...args, force: true, ...pid }, closedName);
 
     return forced.ok ? t(env, "intents.close_app.forced", { name: closedName, pc: device.name }) : failure(env, device, forced, closedName);
   }
@@ -604,11 +615,36 @@ async function mediaFlow(env, params) {
   if (!choice.ok) return choice.answer;
 
   const device = choice.devices[0];
-  const key = ["play_pause", "next", "prev"].includes(params.key) ? params.key : "play_pause";
-  const result = await send(env, actor, device, "media.key", { key }, key);
+  // older params (the AI agent, blocks) know only keys: play_pause is a toggle
+  const op = MEDIA_OPS.includes(params.op) ? params.op : params.key === "next" || params.key === "prev" ? params.key : "toggle";
 
-  return result.ok ? t(env, `intents.pc_media.${key}`) : failure(env, device, result);
+  // a client with media sessions plays and pauses for real, an older one presses the toggle key
+  if (!env.hub.supports?.(device.deviceId, "media.control")) {
+    const key = op === "next" || op === "prev" ? op : "play_pause";
+    const result = await send(env, actor, device, "media.key", { key }, key);
+
+    return result.ok ? t(env, `intents.pc_media.${key}`) : failure(env, device, result);
+  }
+
+  const result = await send(env, actor, device, "media.control", { op }, op);
+
+  if (!result.ok) {
+    if (result.code === "no-session") return t(env, op === "play" ? "intents.pc_media.nothing_to_resume" : "intents.pc_media.nothing_playing", { pc: device.name });
+
+    return failure(env, device, result);
+  }
+
+  const already = result.data?.already === true;
+
+  // the player ignored media sessions and got the toggle key: the state is unknown
+  if (result.data?.fallback === true || op === "toggle") return t(env, "intents.pc_media.play_pause");
+  if (op === "play") return t(env, already ? "intents.pc_media.already_playing" : "intents.pc_media.resumed");
+  if (op === "pause") return t(env, already ? "intents.pc_media.already_paused" : "intents.pc_media.paused");
+
+  return t(env, `intents.pc_media.${op}`);
 }
+
+const MEDIA_OPS = ["play", "pause", "toggle", "next", "prev"];
 
 async function searchFlow(env, params) {
   const { ctx, index } = env;
@@ -631,6 +667,62 @@ async function searchFlow(env, params) {
   if (!result.ok) return failure(env, device, result);
 
   return t(env, keyFor(engine === "youtube" ? "intents.pc_search.done_youtube" : "intents.pc_search.done", choice.pool), { query, pc: device.name });
+}
+
+/**
+ * Parental control by voice. Not "an adult speaks" but "the owner of that PC speaks", confirmed
+ * by voice: an older brother who owns the PC may lift the limits for a younger one.
+ */
+async function parentalFlow(env, params) {
+  const { ctx, index, skill } = env;
+  const verified = typeof ctx.user?.requireVerified === "function" ? await ctx.user.requireVerified().catch(() => null) : null;
+
+  // NODUS has said why
+  if (!verified) return "";
+
+  const userId = String(verified.userId);
+  const controlled = index.all().filter((device) => device.parental);
+  const named = params.pc?.ids?.length ? controlled.filter((device) => params.pc.ids.includes(device.deviceId)) : controlled;
+
+  if (!named.length) return t(env, "intents.pc_parental.none");
+  if (!named.some((device) => device.userId === userId)) return t(env, "intents.pc_parental.not_owner", { pc: named[0].name });
+
+  const choice = await choosePc(ctx, {
+    index,
+    actor: { userId, sharedOnly: false },
+    pc: params.pc,
+    needOnline: false,
+    able: (device) => device.parental && device.userId === userId,
+    recent: skill.recent,
+    askEveryTime: env.settings.askPcEveryTime,
+  });
+
+  if (!choice.ok) return choice.answer;
+
+  const device = choice.devices[0];
+
+  if (!device.parental || device.userId !== userId) return t(env, "intents.pc_parental.not_owner", { pc: device.name });
+
+  const target = { deviceId: device.deviceId, userId };
+  const vars = { pc: device.name };
+
+  skill.store.history.add({ userId, deviceId: device.deviceId, action: `parental.${params.op}`, target: String(params.minutes ?? ""), ok: true, code: "", via: env.via }).catch(() => null);
+
+  if (params.op === "revoke") {
+    await skill.parental.revoke(target);
+    return t(env, "intents.pc_parental.revoked", vars);
+  }
+  if (params.op === "reset") {
+    await skill.parental.resetToday(target);
+    return t(env, "intents.pc_parental.reset", vars);
+  }
+
+  const minutes = params.minutes ?? skill.parental.view(device.deviceId).rules.unlockMinutes;
+  const until = await skill.parental.grant(target, minutes);
+
+  if (minutes === "day") return t(env, "intents.pc_parental.granted_day", vars);
+
+  return t(env, "intents.pc_parental.granted", { ...vars, until: `${until.getHours()}:${String(until.getMinutes()).padStart(2, "0")}` });
 }
 
 async function statusFlow(env) {
@@ -719,6 +811,7 @@ const FLOWS = {
   pc_media: mediaFlow,
   pc_search: searchFlow,
   pc_status: statusFlow,
+  pc_parental: parentalFlow,
 };
 
 module.exports = { runCommand, resolveApp, delayVars, POWER_ACTIONS };

@@ -6,6 +6,7 @@ const state = require("../../lib/state");
 const ACTIONS = {
   launch: ["launch_app", (target) => ({ op: "launch", objects: target ? [target] : [] })],
   close: ["close_app", (target) => (target ? { op: "close", objects: [target] } : { op: "close", objects: [], generic: "game" })],
+  close_active: ["close_app", () => ({ op: "close", objects: [], generic: "active" })],
   shutdown: ["pc_power", () => ({ op: "shutdown" })],
   restart: ["pc_power", () => ({ op: "restart" })],
   sleep: ["pc_power", () => ({ op: "sleep" })],
@@ -17,7 +18,9 @@ const ACTIONS = {
   volume_set: ["pc_volume", () => ({ op: "set" })],
   mute: ["pc_volume", () => ({ op: "mute" })],
   unmute: ["pc_volume", () => ({ op: "unmute" })],
-  media_play_pause: ["pc_media", () => ({ op: "play_pause", key: "play_pause" })],
+  media_play_pause: ["pc_media", () => ({ op: "toggle", key: "play_pause" })],
+  media_pause: ["pc_media", () => ({ op: "pause", key: "play_pause" })],
+  media_resume: ["pc_media", () => ({ op: "play", key: "play_pause" })],
   media_next: ["pc_media", () => ({ op: "next", key: "next" })],
   media_previous: ["pc_media", () => ({ op: "prev", key: "prev" })],
   search: ["pc_search", (target) => ({ op: "search", query: target, engine: "default" })],
@@ -67,7 +70,7 @@ module.exports = {
   },
   errorResponse: "intents.pc_control.error",
   handler: async (params, ctx, configs) => {
-    const entry = ACTIONS[params?.action];
+    const entry = Object.hasOwn(ACTIONS, String(params?.action)) ? ACTIONS[params.action] : null;
 
     if (!entry) return ctx.t("intents.pc_control.unknown");
 

@@ -22,6 +22,8 @@ const MSG = Object.freeze({
   RESULT: "result",
   LEARN: "learn",
   SETTINGS: "settings",
+  PARENTAL: "parental",
+  ALERT: "alert",
   BYE: "bye",
 });
 
@@ -43,11 +45,13 @@ const FEATURES = Object.freeze(["launch", "close", "volume", "media", "power", "
 const ACTIONS = Object.freeze({
   "app.launch": "launch",
   "app.close": "close",
+  "window.close": "close",
   "volume.get": "volume",
   "volume.set": "volume",
   "volume.change": "volume",
   "volume.mute": "volume",
   "media.key": "media",
+  "media.control": "media",
   "power.shutdown": "power",
   "power.restart": "power",
   "power.sleep": "power",
@@ -74,6 +78,9 @@ const RESULT_CODES = Object.freeze([
   "invalid-args",
   "unknown-action",
   "busy",
+  "protected",
+  "no-session",
+  "parental-limit",
   "internal",
   // produced by the server, never by the client
   "timeout",
@@ -82,6 +89,13 @@ const RESULT_CODES = Object.freeze([
 ]);
 
 const MEDIA_KEYS = Object.freeze(["play_pause", "next", "prev"]);
+/** media.control: real play and pause through the Windows media session, not a toggle key */
+const MEDIA_OPS = Object.freeze(["play", "pause", "toggle", "next", "prev"]);
+/**
+ * What a peer can do beyond protocol 1.0 (hello.device.caps, welcome.server.caps):
+ * newer actions and messages are used only with a peer that names them.
+ */
+const CAPS = Object.freeze(["window.close", "media.control", "parental"]);
 const SEARCH_ENGINES = Object.freeze(["google", "yandex", "bing", "duckduckgo", "youtube"]);
 const APP_KINDS = Object.freeze(["game", "app", "site"]);
 const APP_SOURCES = Object.freeze(["steam", "epic", "gog", "start", "custom", "url", "virtual"]);
@@ -258,6 +272,53 @@ const sanitizeState = (raw) => {
     volume: int(data.volume, 0, 100, null),
     muted: typeof data.muted === "boolean" ? data.muted : null,
     shutdownAt: Number.isFinite(shutdownAt) && shutdownAt > 0 ? shutdownAt : null,
+    parental: sanitizeParentalUsage(data.parental),
+  };
+};
+
+/* ── parental control ── */
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MIN = 24 * 60;
+
+/** Limits in minutes a day: null - no limit, 0 - not at all. Weekend - Saturday and Sunday on the PC. */
+const PARENTAL_DEFAULTS = Object.freeze({
+  limits: { weekday: { pcMin: 180, gamesMin: 60 }, weekend: { pcMin: 300, gamesMin: 120 } },
+  extend: { pc: { minutes: 15, times: 2 }, games: { minutes: 15, times: 2 } },
+  unlockMinutes: 120,
+  games: { add: [], remove: [] },
+});
+
+/** What a client reports in `alert`. */
+const ALERT_KINDS = Object.freeze(["killed", "unclean-exit", "pin-unlock", "pin-failed", "extended", "limit"]);
+
+/** The owner's rules, from the personal page or a client: every part falls back to the default. */
+const sanitizeParental = (raw) => {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const defaults = PARENTAL_DEFAULTS;
+  const limit = (value, fallback) => (value === null ? null : int(value, 0, DAY_MIN, fallback));
+  const day = (value, fallback) => ({ pcMin: limit(value?.pcMin, fallback.pcMin), gamesMin: limit(value?.gamesMin, fallback.gamesMin) });
+  const extend = (value, fallback) => ({ minutes: int(value?.minutes, 5, 120, fallback.minutes), times: int(value?.times, 0, 10, fallback.times) });
+  const ids = (value) => strings(value, 300, LIMITS.appId).filter((id) => APP_ID_RE.test(id));
+
+  return {
+    limits: { weekday: day(data.limits?.weekday, defaults.limits.weekday), weekend: day(data.limits?.weekend, defaults.limits.weekend) },
+    extend: { pc: extend(data.extend?.pc, defaults.extend.pc), games: extend(data.extend?.games, defaults.extend.games) },
+    unlockMinutes: int(data.unlockMinutes, 15, 720, defaults.unlockMinutes),
+    games: { add: ids(data.games?.add), remove: ids(data.games?.remove) },
+  };
+};
+
+/** Usage a client counts: seconds today, "+N minutes" presses, what is blocked now. */
+const sanitizeParentalUsage = (raw) => {
+  if (!raw || typeof raw !== "object" || !DAY_RE.test(str(raw.day, 10))) return null;
+
+  return {
+    day: str(raw.day, 10),
+    pcSec: int(raw.pcSec, 0, DAY_MIN * 60, 0),
+    gameSec: int(raw.gameSec, 0, DAY_MIN * 60, 0),
+    extended: { pc: int(raw.extended?.pc, 0, 50, 0), games: int(raw.extended?.games, 0, 50, 0) },
+    locked: oneOf(raw.locked, ["pc", "games"], null),
   };
 };
 
@@ -272,6 +333,7 @@ const sanitizeHelloDevice = (raw) => {
     os: str(data.os, 64),
     host: str(data.host, 64),
     client: str(data.client, 32),
+    caps: (Array.isArray(data.caps) ? data.caps : []).filter((cap) => CAPS.includes(cap)),
   };
 };
 
@@ -309,6 +371,8 @@ module.exports = {
   ACTIONS,
   RESULT_CODES,
   MEDIA_KEYS,
+  MEDIA_OPS,
+  CAPS,
   SEARCH_ENGINES,
   APP_KINDS,
   APP_SOURCES,
@@ -324,6 +388,10 @@ module.exports = {
   sanitizeState,
   sanitizeHelloDevice,
   sanitizeWol,
+  sanitizeParental,
+  sanitizeParentalUsage,
+  PARENTAL_DEFAULTS,
+  ALERT_KINDS,
   isFeatureEnabled,
   encode,
   decode,

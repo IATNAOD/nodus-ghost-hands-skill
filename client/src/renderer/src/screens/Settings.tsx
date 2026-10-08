@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, FileText, Monitor, Network, Settings2, Unlink } from "lucide-react";
 import type { Language, UiState } from "../../../shared/types";
 import { fill, useTexts } from "../i18n";
-import { Button, Card, ChipsEditor, Field, SwitchRow, useToast } from "../ui";
+import { Button, Card, ChipsEditor, Field, Locked, SwitchRow, useToast } from "../ui";
 
 export function Settings({ state }: { state: UiState }) {
   const t = useTexts();
@@ -17,6 +17,7 @@ export function Settings({ state }: { state: UiState }) {
   useEffect(() => setPort(String(state.connection.port)), [state.connection.port]);
 
   const update = state.update;
+  const locked = state.parental.enabled;
   const updateText = fill(t.updateStatus[update.status] ?? "", { version: update.version ?? "", percent: update.percent ?? 0, error: update.error ?? "" });
 
   return (
@@ -25,6 +26,7 @@ export function Settings({ state }: { state: UiState }) {
         <h1>{t.navSettings}</h1>
       </div>
 
+      <Locked locked={locked}>
       <Card title={t.settingsDevice} icon={<Monitor />}>
         <Field label={t.deviceName} hint={t.pairNameHint}>
           <div className="row">
@@ -48,7 +50,8 @@ export function Settings({ state }: { state: UiState }) {
       </Card>
 
       <Card title={t.settingsApp} icon={<Settings2 />}>
-        <SwitchRow title={t.autostart} checked={state.ui.autostart} onChange={(autostart) => window.gh.setUi({ autostart })} />
+        {/* under parental control the client always starts with Windows */}
+        <SwitchRow title={t.autostart} checked={state.ui.autostart || locked} onChange={(autostart) => window.gh.setUi({ autostart })} />
         <SwitchRow title={t.startHidden} checked={state.ui.startHidden} onChange={(startHidden) => window.gh.setUi({ startHidden })} />
         <SwitchRow title={t.closeToTray} checked={state.ui.closeToTray} onChange={(closeToTray) => window.gh.setUi({ closeToTray })} />
         <Field label={t.language}>
@@ -84,9 +87,10 @@ export function Settings({ state }: { state: UiState }) {
           </Button>
         </div>
       </Card>
+      </Locked>
 
       <Card title={t.settingsUpdates} icon={<Download />}>
-        <SwitchRow title={t.autoUpdate} checked={state.ui.autoUpdate} onChange={(autoUpdate) => window.gh.setUi({ autoUpdate })} />
+        <SwitchRow title={t.autoUpdate} disabled={locked} checked={state.ui.autoUpdate} onChange={(autoUpdate) => window.gh.setUi({ autoUpdate })} />
         <div className="row">
           <Button variant="secondary" disabled={update.status === "disabled" || update.status === "checking"} onClick={() => window.gh.checkUpdates()}>
             {t.checkUpdates}
@@ -108,7 +112,7 @@ export function Settings({ state }: { state: UiState }) {
           </Button>
           <span className="hint">{t.logsHint}</span>
           <span className="spacer" />
-          {confirmUnpair ? (
+          {locked ? null : confirmUnpair ? (
             <>
               <span className="error" style={{ maxWidth: 380 }}>{t.unpairConfirm}</span>
               <Button variant="danger" onClick={() => window.gh.unpair()}>

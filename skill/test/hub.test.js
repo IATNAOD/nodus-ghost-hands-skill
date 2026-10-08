@@ -14,7 +14,7 @@ const U1 = "64b000000000000000000001";
 const U2 = "64b000000000000000000002";
 
 /** Store with keys of two people, a hub and a server on a free port. */
-async function stack({ authTimeoutMs = 2000 } = {}) {
+async function stack({ authTimeoutMs = 2000, parental } = {}) {
   const store = createMemoryStore();
   const keys = { [U1]: generateKey(), [U2]: generateKey() };
 
@@ -22,7 +22,7 @@ async function stack({ authTimeoutMs = 2000 } = {}) {
 
   const index = new NameIndex();
   const events = [];
-  const hub = new Hub({ store, index, version: "test", authTimeoutMs, onEvent: (type, data) => events.push({ type, ...data }) });
+  const hub = new Hub({ store, index, version: "test", authTimeoutMs, parental, onEvent: (type, data) => events.push({ type, ...data }) });
   const server = new Server({ hub });
 
   await server.start(0);
@@ -352,6 +352,47 @@ test("settings: the match threshold comes with welcome and after a change", asyn
   s.hub.broadcastSettings();
   assert.deepEqual((await pc.next(P.MSG.SETTINGS)).match, { accept: 0.8 });
   pc.ws.close();
+});
+
+test("parental: rules only for a client that knows them; alerts and usage become events", async (t) => {
+  const s = await stack({ parental: (deviceId) => ({ enabled: true, rev: 3, deviceId }) });
+
+  t.after(() => shutdown(s));
+
+  const modern = client(s.url);
+
+  await modern.opened;
+  hello(modern, s.keys[U1], null, { caps: ["parental", "window.close", "bogus"] });
+
+  const welcome = await modern.next(P.MSG.WELCOME);
+
+  assert.deepEqual(welcome.server.caps, P.CAPS);
+  assert.equal(welcome.owner.id, U1);
+  assert.deepEqual(await modern.next(P.MSG.PARENTAL), { t: "parental", enabled: true, rev: 3, deviceId: welcome.deviceId });
+  assert.equal(s.hub.supports(welcome.deviceId, "window.close"), true);
+  assert.equal(s.hub.supports(welcome.deviceId, "bogus"), false);
+
+  s.hub.sendParental(welcome.deviceId, { enabled: false, rev: 4 });
+  assert.equal((await modern.next(P.MSG.PARENTAL)).rev, 4);
+
+  modern.send(P.MSG.ALERT, { kind: "killed" });
+  modern.send(P.MSG.ALERT, { kind: "made-up" });
+  modern.send(P.MSG.STATE, { data: { running: [], parental: { day: "2026-10-08", pcSec: 60, gameSec: 0, locked: null } } });
+  await settle(100);
+  assert.deepEqual(s.events.filter((event) => event.type === "parental-alert").map((event) => event.kind), ["killed"]);
+  assert.equal(s.events.find((event) => event.type === "parental-usage").usage.pcSec, 60);
+
+  // an older client gets no parental message
+  const old = client(s.url);
+
+  await old.opened;
+  hello(old, s.keys[U2], null, { machineHash: "b".repeat(64) });
+  await old.next(P.MSG.WELCOME);
+  s.hub.sendParental((await s.store.devices.byUser(U2))[0].deviceId, { enabled: true, rev: 1 });
+  await settle(100);
+  assert.equal(await Promise.race([old.next(P.MSG.PARENTAL), settle(150).then(() => "none")]), "none");
+  modern.ws.close();
+  old.ws.close();
 });
 
 test("dispose closes the PCs with going-away", async () => {

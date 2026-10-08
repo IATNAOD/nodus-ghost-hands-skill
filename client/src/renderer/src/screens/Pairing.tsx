@@ -22,6 +22,8 @@ export function Pairing({ state }: { state: UiState }) {
   const [autostart, setAutostart] = useState(state.ui.autostart);
   const [host, setHost] = useState(state.connection.host);
   const [port, setPort] = useState(String(state.connection.port));
+  // a PC under parental control pairs again only with the parent's PIN
+  const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // why a paired PC is back here: the key was reissued, the PC unpaired; shown on top
@@ -61,7 +63,7 @@ export function Pairing({ state }: { state: UiState }) {
     setNotice(null);
     setBusy(true);
 
-    const result = await window.gh.pair({ key, name: name.trim(), shared, host: host.trim(), port: Number(port) || 47300, autostart });
+    const result = await window.gh.pair({ key, name: name.trim(), shared, host: host.trim(), port: Number(port) || 47300, autostart, pin: state.parental.enabled ? pin : undefined });
 
     setBusy(false);
     if (!result.ok) setError(t[`error.${result.code}` as keyof typeof t] as string ?? result.code);
@@ -116,6 +118,21 @@ export function Pairing({ state }: { state: UiState }) {
           <input className="input" value={name} maxLength={40} placeholder={t.pairNamePlaceholder} onChange={(event) => setName(event.target.value)} />
         </Field>
 
+        {state.parental.enabled && (
+          <Field label={t.pairPin} hint={t.pairPinHint}>
+            <input
+              className="input"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={12}
+              style={{ maxWidth: 200 }}
+              value={pin}
+              onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+            />
+          </Field>
+        )}
+
         <SwitchRow title={t.pairShared} hint={t.pairSharedHint} checked={shared} onChange={setShared} />
         <SwitchRow title={t.pairAutostart} checked={autostart} onChange={setAutostart} />
 
@@ -148,7 +165,7 @@ export function Pairing({ state }: { state: UiState }) {
 
         {error && <p className="error">{error}</p>}
 
-        <Button variant="primary" type="submit" disabled={!keyValid || !name.trim() || busy} style={{ padding: "12px 18px", fontSize: 14 }}>
+        <Button variant="primary" type="submit" disabled={!keyValid || !name.trim() || busy || (state.parental.enabled && pin.length < 6)} style={{ padding: "12px 18px", fontSize: 14 }}>
           {busy ? t.pairConnecting : t.pairConnect}
         </Button>
       </form>

@@ -97,6 +97,8 @@ class NameIndex {
       lastSeenAt: record.lastSeenAt ? new Date(record.lastSeenAt).getTime() : previous?.lastSeenAt ?? 0,
       state: previous?.state ?? EMPTY_STATE,
       running: previous?.running ?? [],
+      // under parental control: its owner may lift the limits by voice
+      parental: previous?.parental ?? false,
     };
 
     this.devices.set(record.deviceId, entry);
@@ -128,6 +130,14 @@ class NameIndex {
       ...item,
       prepared: item.appId && entry.appById.has(item.appId) ? entry.appById.get(item.appId) : prepareApp({ id: `run:${item.key}`, name: item.name }),
     }));
+    this.version++;
+  }
+
+  setParental(deviceId, enabled) {
+    const entry = this.devices.get(deviceId);
+
+    if (!entry || entry.parental === Boolean(enabled)) return;
+    entry.parental = Boolean(enabled);
     this.version++;
   }
 

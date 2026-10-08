@@ -184,6 +184,50 @@ namespace GhostHelper
             return null;
         }
 
+        // ---- window.close ----
+        // The window in front, like Alt+F4: WM_CLOSE to that window alone, then wait until it
+        // is gone, hidden (an app going to the tray) or its process exited. The desktop, the
+        // taskbar, protected processes (explorer and system ones), the helper and Ghost Hands are
+        // never touched. Forcing is the caller's choice: process.kill of the returned pid only.
+        //   closed  - the window is gone or hidden
+        //   pending - still shown after softMs: the app refused or asks to save
+        //   none    - nothing in front;  protected - the shell or a system window is in front
+        public static Dictionary<string, object> CloseForeground(int softMs, int selfPid, int parentPid)
+        {
+            if (softMs <= 0) softMs = 4000;
+            IntPtr hWnd = Native.GetForegroundWindow();
+            if (hWnd == IntPtr.Zero) return new Dictionary<string, object> { ["none"] = true };
+
+            Native.GetWindowThreadProcessId(hWnd, out uint wpid);
+            int pid = (int)wpid;
+            string exe = Processes.GetImagePath(pid);
+            FileVersionInfo fvi = GetVersionInfo(exe);
+            string name = FirstNonEmpty(Trim(fvi?.FileDescription), Trim(fvi?.ProductName),
+                exe != null ? Path.GetFileNameWithoutExtension(exe) : null) ?? "";
+
+            if (pid == 0 || ShellClasses.Contains(GetClassName(hWnd)) || Processes.IsProtectedProcess(pid, selfPid, parentPid))
+                return new Dictionary<string, object> { ["protected"] = true, ["pid"] = pid, ["name"] = name };
+
+            Native.PostMessage(hWnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+
+            long deadline = Environment.TickCount + softMs;
+            bool gone = false;
+            while (Environment.TickCount < deadline)
+            {
+                System.Threading.Thread.Sleep(100);
+                if (!Native.IsWindow(hWnd) || !Native.IsWindowVisible(hWnd)) { gone = true; break; }
+            }
+
+            return new Dictionary<string, object>
+            {
+                ["pid"] = pid,
+                ["exe"] = exe,
+                ["name"] = name,
+                ["closed"] = gone,
+                ["pending"] = !gone
+            };
+        }
+
         // ---- window.focus ----
         public static Dictionary<string, object> Focus(int pid)
         {

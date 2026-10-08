@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, Gamepad2, Settings as SettingsIcon, SlidersHorizontal } from "lucide-react";
+import { Activity, Gamepad2, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import type { UiState } from "../../shared/types";
 import { TEXTS, TextsContext } from "./i18n";
 import { Logo, ToastProvider } from "./ui";
@@ -60,6 +60,12 @@ export function App() {
               </div>
             </aside>
             <main className="main">
+              {state.parental.enabled && (
+                <div className="banner" style={{ maxWidth: 940, marginBottom: 16 }}>
+                  <ShieldCheck />
+                  <span>{t.parentalBanner}</span>
+                </div>
+              )}
               {page === "status" && <Status state={state} />}
               {page === "apps" && <Apps state={state} />}
               {page === "commands" && <Commands state={state} />}

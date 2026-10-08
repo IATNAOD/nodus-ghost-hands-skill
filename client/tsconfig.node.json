@@ -16,8 +16,15 @@
     "isolatedModules": true,
     "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": { "@skill/*": ["../skill/lib/*"] }
   },
-  "include": ["electron.vite.config.ts", "vitest.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "test/**/*", "../skill/lib/**/*.js"]
+  "include": [
+    "electron.vite.config.ts",
+    "vitest.config.ts",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "test/**/*",
+    "../skill/lib/**/*.js"
+  ]
 }

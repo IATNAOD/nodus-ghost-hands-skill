@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppWindow, FolderOpen, Globe, Mic, Play, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { AppView, PhraseCheck, StartAppView, UiState } from "../../../shared/types";
 import { fill, useTexts } from "../i18n";
-import { Button, Card, ChipsEditor, Field, Modal, Switch, useToast } from "../ui";
+import { Button, Card, ChipsEditor, Field, Locked, Modal, Switch, useToast } from "../ui";
 
 type Filter = "all" | "game" | "app" | "site" | "off";
 
@@ -334,6 +334,7 @@ export function Apps({ state }: { state: UiState }) {
           ))}
         </div>
         <span className="spacer" />
+        <Locked locked={state.parental.enabled}>
         <Button variant="secondary" small onClick={() => setStartOpen(true)}>
           <AppWindow />
           {t.addStart}
@@ -350,9 +351,12 @@ export function Apps({ state }: { state: UiState }) {
           <RefreshCw />
           {state.scanning ? t.scanning : t.rescan}
         </Button>
+        </Locked>
       </div>
 
-      <div className="app-list">{apps.length ? apps.map((app) => <AppRow key={app.id} app={app} />) : <div className="empty">{t.emptyApps}</div>}</div>
+      <Locked locked={state.parental.enabled}>
+        <div className="app-list">{apps.length ? apps.map((app) => <AppRow key={app.id} app={app} />) : <div className="empty">{t.emptyApps}</div>}</div>
+      </Locked>
 
       <StartMenuDialog open={startOpen} onClose={() => setStartOpen(false)} />
       <AddDialog type={adding} onClose={() => setAdding(null)} />

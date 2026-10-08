@@ -31,7 +31,7 @@ const LAPTOP = { name: "Ноутбук", apps: [app("start:chrome", "Google Chro
  * A loaded skill with PCs; the hub answers commands with `replies[action]`.
  * @param {{ devices?: object[], replies?: object, settings?: object }} options
  */
-function setup({ devices = [], replies = {}, settings = {} } = {}) {
+function setup({ devices = [], replies = {}, settings = {}, caps = [] } = {}) {
   const index = new NameIndex();
 
   for (const device of devices) index.upsert({ deviceId: device.id, userId: device.userId ?? U1, userName: "Маша", online: device.online ?? true, config: device.config });
@@ -46,6 +46,7 @@ function setup({ devices = [], replies = {}, settings = {} } = {}) {
       return reply ?? { ok: true, code: null, data: {} };
     },
     learn: (deviceId, appId, alias) => calls.push({ deviceId, learn: { appId, alias } }),
+    supports: (deviceId, cap) => caps.includes(cap),
     isOnline: (deviceId) => Boolean(index.get(deviceId)?.online),
   };
   const notes = [];
@@ -279,6 +280,54 @@ test("close: an app without a window (in the tray) is offered a forced close", a
 
   assert.deepEqual(ctx.calls.asked, ["Google Chrome работает в фоне без окна. Закрыть принудительно?"]);
   assert.equal(answer, "Хорошо, оставляю.");
+});
+
+test("close the active program: the window in front, never the desktop; force only its process", async () => {
+  const { calls } = setup({
+    devices: [{ id: "d1", config: GAMING }],
+    caps: ["window.close"],
+    replies: {
+      "window.close": (args) => (args.force ? { ok: true, data: { closed: [42] } } : { ok: true, data: { name: "Блокнот", pid: 42, closed: [], pending: [42] } }),
+    },
+  });
+
+  const stuck = await say("закрой активную программу", { answers: ["да"] });
+
+  assert.deepEqual(stuck.ctx.calls.asked, ["Блокнот не закрывается. Закрыть принудительно?"]);
+  assert.deepEqual(calls.map((call) => [call.action, call.args]), [["window.close", {}], ["window.close", { force: true, pid: 42 }]]);
+  assert.equal(stuck.answer, "Закрыл Блокнот принудительно.");
+
+  setup({ devices: [{ id: "d1", config: GAMING }], caps: ["window.close"], replies: { "window.close": { ok: false, code: "protected", data: {} } } });
+  assert.equal((await say("закрой активное окно")).answer, "Впереди на компьютере «Игровой» рабочий стол или Проводник, их не закрываю.");
+
+  setup({ devices: [{ id: "d1", config: GAMING }], caps: ["window.close"], replies: { "window.close": { ok: false, code: "not-running", data: {} } } });
+  assert.equal((await say("закрой текущее приложение")).answer, "На компьютере «Игровой» нет активной программы.");
+
+  // an older client: the foreground target of app.close
+  const old = setup({ devices: [{ id: "d1", config: GAMING }], replies: { "app.close": { ok: true, data: { name: "Блокнот", closed: [1], pending: [] } } } });
+
+  assert.equal((await say("закрой активную программу")).answer, "Закрыл Блокнот.");
+  assert.deepEqual(old.calls[0].args, { target: "foreground" });
+});
+
+test("media: pause and resume for real; older clients get the toggle key", async () => {
+  const replies = { "media.control": (args) => ({ ok: true, data: { already: args.op === "play" && false } }) };
+  const { calls } = setup({ devices: [{ id: "d1", config: GAMING }], caps: ["media.control"], replies });
+
+  assert.equal((await say("поставь на паузу на компьютере")).answer, "Поставил на паузу.");
+  assert.equal((await say("продолжи на компьютере", { female: true })).answer, "Продолжаю.");
+  assert.deepEqual(calls.map((call) => call.args.op), ["pause", "play"]);
+
+  setup({ devices: [{ id: "d1", config: GAMING }], caps: ["media.control"], replies: { "media.control": { ok: true, data: { already: true } } } });
+  assert.equal((await say("продолжи на компьютере")).answer, "Уже играет.");
+
+  setup({ devices: [{ id: "d1", config: GAMING }], caps: ["media.control"], replies: { "media.control": { ok: false, code: "no-session", data: {} } } });
+  assert.equal((await say("возобнови на компьютере")).answer, "На компьютере «Игровой» нечего продолжать.");
+
+  const old = setup({ devices: [{ id: "d1", config: GAMING }] });
+
+  assert.equal((await say("продолжи на компьютере")).answer, "Готово.");
+  assert.deepEqual(old.calls[0], { deviceId: "d1", action: "media.key", args: { key: "play_pause" } });
 });
 
 test("errors of the PC become words", async () => {

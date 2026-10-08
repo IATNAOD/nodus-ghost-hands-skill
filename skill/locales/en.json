@@ -55,7 +55,17 @@
     "pc_online": { "label": "Computer came online" },
     "pc_offline": { "label": "Computer went offline" },
     "app_started": { "label": "App or game started on a computer" },
-    "app_stopped": { "label": "App or game closed on a computer" }
+    "app_stopped": { "label": "App or game closed on a computer" },
+    "parental_limit": { "label": "Parental control: time on the computer or in games is over" },
+    "parental_extended": { "label": "Parental control: time extended with the button" },
+    "parental_alert": { "label": "Parental control: Ghost Hands was closed, the computer vanished or a PIN was entered" }
+  },
+  "parental": {
+    "killed": "Ghost Hands on {{pc}} was force-closed and started again",
+    "unclean_exit": "Ghost Hands on {{pc}} was force-closed last time",
+    "vanished": "{{pc}} left the network without shutting down",
+    "pin_failed": "A wrong PIN was entered several times on {{pc}}",
+    "pin_unlock": "The limits on {{pc}} were lifted with the PIN"
   },
   "nodes": {
     "pc_run_app": {
@@ -163,6 +173,7 @@
     "invalid_args": "The computer didn't understand the command.",
     "unknown_action": "The client on {{pc}} doesn't know this command. Update it.",
     "busy": "{{pc}} is busy. Try again.",
+    "parental_limit": "Time on {{pc}} is over for today.",
     "internal": "I couldn't run the command on {{pc}}."
   },
   "intents": {
@@ -191,6 +202,8 @@
       "not_found": "I couldn't find {{name}} among running apps.",
       "not_running": "{{name}} isn't running.",
       "no_game": "I don't see any running games.",
+      "no_active": "There's no active program on {{pc}}.",
+      "shell_active": "The desktop or File Explorer is in front on {{pc}}, I don't close those.",
       "which": "Which one should I close: {{names, list(type: disjunction)}}?",
       "stuck": "{{name}} doesn't close. Force it?",
       "background": "{{name}} runs in the background without a window. Force it to close?",
@@ -260,11 +273,27 @@
       "set_many": "Done, volume {{level}} percent."
     },
     "pc_media": {
-      "label": "Music and video on the computer: pause, next track",
+      "label": "Music and video on the computer: pause, resume, next track",
       "error": "That didn't work.",
       "play_pause": "Done.",
+      "paused": "Paused.",
+      "resumed": "Resuming.",
+      "already_playing": "It's already playing.",
+      "already_paused": "It's already paused.",
+      "nothing_playing": "Nothing is playing on {{pc}}.",
+      "nothing_to_resume": "There's nothing to resume on {{pc}}.",
       "next": "Next track.",
       "prev": "Previous track."
+    },
+    "pc_parental": {
+      "label": "Parental control on a computer: lift or bring back the limits",
+      "error": "I couldn't change the limits.",
+      "granted": "The limits on {{pc}} are lifted until {{until}}.",
+      "granted_day": "The limits on {{pc}} are lifted for the rest of the day.",
+      "revoked": "The limits on {{pc}} are back.",
+      "reset": "Today's time on {{pc}} is reset.",
+      "not_owner": "Only the owner of {{pc}} can do that.",
+      "none": "No computer is under parental control."
     },
     "pc_search": {
       "label": "Web search on the computer",

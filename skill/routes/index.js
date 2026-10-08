@@ -179,10 +179,110 @@ module.exports = async (app) => {
     if (record.userId !== user.id && user.role !== "admin") return res.code(403).send(fail("forbidden"));
 
     await skill.store.devices.remove(record.deviceId);
+    await skill.parental?.remove(record.deviceId);
     skill.index.remove(record.deviceId);
     skill.hub.kick(record.deviceId, 4004, "unpaired");
 
     return res.send(ok());
+  }));
+
+  /* ── parental control: only the owner of a PC sees and changes it ── */
+
+  const ownPc = async (skill, user, id) => {
+    const record = /^[A-Za-z0-9_-]{6,32}$/.test(String(id)) ? await skill.store.devices.byId(String(id)) : null;
+
+    return record && record.userId === user.id ? record : null;
+  };
+
+  const parentalView = (skill, record) => ({
+    id: record.deviceId,
+    name: record.name,
+    online: skill.hub.isOnline(record.deviceId),
+    // an older client online does not know parental control
+    outdated: skill.hub.isOnline(record.deviceId) && !skill.hub.supports(record.deviceId, "parental"),
+    ...skill.parental.view(record.deviceId),
+    // what may count as a game: the PC's apps, Steam/Epic/GOG games marked already
+    apps: (record.config?.apps ?? []).map((app) => ({ id: app.id, name: app.name, game: app.kind === "game" })),
+  });
+
+  const logParental = (skill, user, record, action, target = "") =>
+    skill.store.history
+      .add({ userId: user.id, deviceId: record.deviceId, action, target: String(target), ok: true, code: "", via: "panel" })
+      .catch(() => undefined);
+
+  // GET .../routes/parental - parental control of the person's own PCs
+  app.get("/parental", route(async ({ skill, user, res }) => {
+    const records = await skill.store.devices.byUser(user.id);
+
+    return res.send(ok({ devices: records.map((record) => parentalView(skill, record)) }));
+  }));
+
+  // PUT .../routes/parental/:id  { enabled?, rules? }
+  app.put("/parental/:id", route(async ({ skill, user, req, res }) => {
+    const record = await ownPc(skill, user, req.params.id);
+
+    if (!record) return res.code(404).send(fail("not-found"));
+
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+
+    if (typeof body.enabled === "boolean" && body.enabled !== skill.parental.isEnabled(record.deviceId)) {
+      await skill.parental.setEnabled(record, body.enabled);
+      logParental(skill, user, record, body.enabled ? "parental.on" : "parental.off");
+    }
+    if (body.rules && typeof body.rules === "object") await skill.parental.setRules(record, body.rules);
+
+    return res.send(ok(parentalView(skill, record)));
+  }));
+
+  // PUT .../routes/parental/:id/pin  { pin } - 6-12 digits, not 111111 or 123456; never returned
+  app.put("/parental/:id/pin", route(async ({ skill, user, req, res }) => {
+    const record = await ownPc(skill, user, req.params.id);
+
+    if (!record) return res.code(404).send(fail("not-found"));
+
+    const problem = await skill.parental.setPin(record, typeof req.body?.pin === "string" ? req.body.pin.trim() : "");
+
+    if (problem) return res.code(400).send(fail(problem));
+    logParental(skill, user, record, "parental.pin");
+
+    return res.send(ok(parentalView(skill, record)));
+  }));
+
+  // POST .../routes/parental/:id/grant  { minutes: 1..720 | "day" } - lift the limits for a while
+  app.post("/parental/:id/grant", route(async ({ skill, user, req, res }) => {
+    const record = await ownPc(skill, user, req.params.id);
+
+    if (!record) return res.code(404).send(fail("not-found"));
+
+    const minutes = req.body?.minutes === "day" ? "day" : Number(req.body?.minutes);
+
+    if (minutes !== "day" && !(Number.isInteger(minutes) && minutes >= 1 && minutes <= 720)) return res.code(400).send(fail("minutes-invalid"));
+    await skill.parental.grant(record, minutes);
+    logParental(skill, user, record, "parental.grant", minutes);
+
+    return res.send(ok(parentalView(skill, record)));
+  }));
+
+  // POST .../routes/parental/:id/revoke - the limits are back
+  app.post("/parental/:id/revoke", route(async ({ skill, user, req, res }) => {
+    const record = await ownPc(skill, user, req.params.id);
+
+    if (!record) return res.code(404).send(fail("not-found"));
+    await skill.parental.revoke(record);
+    logParental(skill, user, record, "parental.revoke");
+
+    return res.send(ok(parentalView(skill, record)));
+  }));
+
+  // POST .../routes/parental/:id/reset-today - today's counters to zero
+  app.post("/parental/:id/reset-today", route(async ({ skill, user, req, res }) => {
+    const record = await ownPc(skill, user, req.params.id);
+
+    if (!record) return res.code(404).send(fail("not-found"));
+    await skill.parental.resetToday(record);
+    logParental(skill, user, record, "parental.reset");
+
+    return res.send(ok(parentalView(skill, record)));
   }));
 
   // GET .../routes/admin/overview - every PC of the house (admin)

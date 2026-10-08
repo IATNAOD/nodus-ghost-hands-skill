@@ -26,6 +26,10 @@ namespace GhostHelper
             if (args.Length > 0 && string.Equals(args[0], "selftest", StringComparison.OrdinalIgnoreCase))
                 return RunCliSelftest();
 
+            // the watchdog of a client under parental control: no stdio protocol
+            if (args.Length > 0 && string.Equals(args[0], "guard", StringComparison.OrdinalIgnoreCase))
+                return Guard.Run(args);
+
             ParseParentArg(args);
             SetupStdio();
 
@@ -122,6 +126,18 @@ namespace GhostHelper
 
         private static readonly Dictionary<string, object> Empty = new Dictionary<string, object>();
 
+        // Media.Control references WinRT types: on Windows without media sessions (before 1809)
+        // the method itself fails to load - the caller turns that into "unsupported".
+        private static object MediaControl(string op)
+        {
+            try { return Media.Control(op); }
+            catch (HelperException) { throw; }
+            catch (Exception ex) when (ex is TypeLoadException || ex is System.IO.FileNotFoundException || ex is System.Runtime.InteropServices.COMException || ex is InvalidCastException)
+            {
+                throw new HelperException("unsupported", "Media sessions are not available: " + ex.Message);
+            }
+        }
+
         private static object Dispatch(string cmd, Args args)
         {
             switch (cmd)
@@ -143,6 +159,8 @@ namespace GhostHelper
                     return Audio.SetMute(args.GetBool("muted", required: true));
 
                 // ---- media ----
+                case "media.control":
+                    return MediaControl(args.GetString("op", required: true));
                 case "media.key":
                     Input.MediaKey(args.GetString("key", required: true));
                     return Empty;
@@ -171,6 +189,8 @@ namespace GhostHelper
                 case "foreground.allow":
                     Native.AllowSetForegroundWindow(-1); // ASFW_ANY
                     return Empty;
+                case "window.close":
+                    return Windows.CloseForeground(args.GetInt("softMs", 4000), _selfPid, _parentPid);
                 case "window.focus":
                     return Windows.Focus(args.GetInt("pid", required: true));
 

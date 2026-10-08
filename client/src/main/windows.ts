@@ -1,16 +1,18 @@
 import path from "path";
-import { BrowserWindow, screen, shell } from "electron";
+import { app, BrowserWindow, screen, shell } from "electron";
 import { getLanguage } from "./i18n";
 import { resourcePath } from "./paths";
 import type { OverlayHost } from "./exec/power";
 
 const BACKGROUND = "#120d1c";
 
-const pageUrl = (page: "index" | "overlay", query: Record<string, string> = {}): { url?: string; file?: string; query: Record<string, string> } => {
+export type Page = "index" | "overlay" | "notice" | "lock";
+
+const pageUrl = (page: Page, query: Record<string, string> = {}): { url?: string; file?: string; query: Record<string, string> } => {
   const devServer = process.env.ELECTRON_RENDERER_URL;
 
   if (devServer) {
-    const url = new URL(`${devServer}/${page === "index" ? "" : "overlay.html"}`);
+    const url = new URL(`${devServer}/${page === "index" ? "" : `${page}.html`}`);
 
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
     return { url: url.toString(), query };
@@ -19,7 +21,7 @@ const pageUrl = (page: "index" | "overlay", query: Record<string, string> = {}):
   return { file: path.join(__dirname, `../renderer/${page}.html`), query };
 };
 
-const load = (window: BrowserWindow, page: "index" | "overlay", query: Record<string, string> = {}): void => {
+export const load = (window: BrowserWindow, page: Page, query: Record<string, string> = {}): void => {
   const target = pageUrl(page, query);
 
   if (target.url) window.loadURL(target.url);
@@ -32,6 +34,8 @@ const secure = {
   nodeIntegration: false,
   sandbox: true,
   spellcheck: false,
+  // the installed app has no DevTools: nothing to call around the settings lock
+  devTools: !app.isPackaged,
 };
 
 /** The main window: dark title bar with native buttons, hidden instead of closed when the tray is on. */

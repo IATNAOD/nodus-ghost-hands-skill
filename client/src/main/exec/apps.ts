@@ -218,3 +218,43 @@ export async function closeApp(deps: AppDeps, args: Record<string, unknown>, sof
     return fail(helperCode(error));
   }
 }
+
+interface ForegroundResult {
+  none?: boolean;
+  protected?: boolean;
+  pid?: number;
+  name?: string;
+  closed?: boolean;
+  pending?: boolean;
+}
+
+/**
+ * Close the window in front, like Alt+F4: that window alone, not every process with its exe.
+ * The desktop and Explorer are never closed (`protected`). Forcing kills only the process of
+ * that window (the pid from the first answer), never a tree.
+ */
+export async function closeForeground(deps: AppDeps, args: Record<string, unknown>, softMs = 4000): Promise<Result> {
+  if (args.force === true) {
+    const pid = Number(args.pid);
+
+    if (!Number.isInteger(pid) || pid <= 0) return fail("invalid-args");
+
+    const result = await deps.helper.call<{ killed: number[]; failed: { pid: number; code: string }[] }>("process.kill", { pids: [pid], tree: false }, 10000);
+
+    if (result.killed.length) return ok({ closed: result.killed, pending: [] });
+    return fail(result.failed[0]?.code === "protected" ? "protected" : "not-running");
+  }
+
+  const result = await deps.helper.call<ForegroundResult>("window.close", { softMs }, softMs + 4000);
+
+  if (result.none) return fail("not-running");
+  if (result.protected) return fail("protected");
+
+  // a catalog name ("Dota 2") is better than the file description
+  const entry = deps.running.entries.find((item) => typeof result.pid === "number" && item.pids.includes(result.pid));
+  const name = entry?.name ?? result.name ?? "";
+
+  log.info(`close the window in front: ${name}, ${result.closed ? "closed" : "still open"}`);
+
+  return ok({ name, pid: result.pid, closed: result.closed ? [result.pid] : [], pending: result.pending ? [result.pid] : [] });
+}

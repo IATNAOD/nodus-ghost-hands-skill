@@ -77,6 +77,16 @@ CLI self-test (one JSON line, exit 0/1):
 - `GhostHelper.exe` (no args) — same loop, without the parent-death check.
 - `GhostHelper.exe selftest` — run the self-test, print one JSON line, exit
   `0` (healthy) or `1`.
+- `GhostHelper.exe guard --pid <client> --run <run.json> --exe <client exe> [--arg <a>]...`
+  — the watchdog of a client under parental control, no stdio protocol. It
+  starts a copy of itself with `--child` and exits, so the copy is outside the
+  client's process tree. The copy takes the mutex `Local\GhostHandsGuard-<hash
+  of the profile dir>` (a second watchdog quits), writes `guard.json`
+  (`{pid, client}`) next to `run.json` and waits for the client to exit. When
+  `run.json` still names that pid, has no `cleanExitAt` and `guarded` is not
+  `false`, it starts `<client exe> <args>` again (without
+  `ELECTRON_RUN_AS_NODE`), at most 5 times in 10 minutes
+  (`guard-restarts.json`), and exits.
 
 ### Framing
 
@@ -113,6 +123,7 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `volume.change` | `{delta}` | `{level, muted}` (clamped 0..100; `delta>0` unmutes) |
 | `volume.mute` | `{muted:bool}` | `{level, muted}` |
 | `media.key` | `{key}` | `{}` — key ∈ `play_pause|next|prev|stop` (SendInput) |
+| `media.control` | `{op}` | op ∈ `status|play|pause|toggle|next|prev` via the system media sessions (SMTC, Windows 10 1809+). `status` → `{playing, sessions:[{app, status}]}` (changes nothing); `play` → `{already:true}` when something plays; `pause` pauses every playing session. Errors: `no-session`, `refused`, `unsupported` (no WinRT: use `media.key`) |
 | `windows.list` | — | `[{pid, exe, name, product, description, aumid, foreground, fullscreen}]` |
 | `windows.watch` | `{intervalMs:2000}` | `{}` then `{"event":"windows","data":[...]}` on change (first snapshot immediately) |
 | `windows.unwatch` | — | `{}` |
@@ -122,6 +133,7 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `process.start` | `{path, args?, cwd?}` | `{pid:number|null}` (ShellExecute; supports shortcuts & UAC) |
 | `foreground.allow` | — | `{}` (`AllowSetForegroundWindow(ASFW_ANY)`) |
 | `window.focus` | `{pid}` | `{focused:bool}` |
+| `window.close` | `{softMs:4000}` | the foreground window only: `{none:true}` (nothing in focus), `{protected:true, pid, name}` (desktop, taskbar, a protected process, the helper or its parent) or WM_CLOSE to that window and `{pid, exe, name, closed, pending}` after it is gone, hidden or `softMs` passed |
 | `power.lock` | — | `{}` (`LockWorkStation`) |
 | `power.sleep` | — | `{}` now, then suspends ~700 ms later |
 | `display.off` | — | `{}` (monitor power off, broadcast) |
@@ -164,6 +176,8 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `Processes.cs` | Toolhelp snapshot, process list/close/kill/start |
 | `Power.cs` | lock / sleep / display-off |
 | `Input.cs` | media keys (SendInput) |
+| `Media.cs` | `media.control` (SMTC over WinRT; `Microsoft.Windows.SDK.Contracts` at build time only) |
+| `Guard.cs` | `guard` mode: the parental-control watchdog |
 | `Shell.cs` | STA executor + Shell.Application (startapps, desktop.show) |
 | `Registry.cs` | registry read/enum |
 | `Network.cs` | NIC info |

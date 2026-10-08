@@ -106,6 +106,9 @@
     { "id": "pc_online", "label": "events.pc_online.label", "outputs": ["text", "from", "computer"] },
     { "id": "pc_offline", "label": "events.pc_offline.label", "outputs": ["text", "from", "computer"] },
     { "id": "app_started", "label": "events.app_started.label", "outputs": ["text", "from", "computer", "app", "kind"] },
-    { "id": "app_stopped", "label": "events.app_stopped.label", "outputs": ["text", "from", "computer", "app", "kind"] }
+    { "id": "app_stopped", "label": "events.app_stopped.label", "outputs": ["text", "from", "computer", "app", "kind"] },
+    { "id": "parental_limit", "label": "events.parental_limit.label", "outputs": ["text", "from", "computer", "limit"] },
+    { "id": "parental_extended", "label": "events.parental_extended.label", "outputs": ["text", "from", "computer"] },
+    { "id": "parental_alert", "label": "events.parental_alert.label", "outputs": ["text", "from", "computer", "alert"] }
   ]
 }

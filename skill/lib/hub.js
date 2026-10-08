@@ -55,9 +55,11 @@ class Hub {
    * @param {number} [deps.authTimeoutMs] time for the first message
    * @param {number} [deps.pingIntervalMs] heartbeat period
    */
-  constructor({ store, index, onEvent = () => {}, log = () => {}, version = "", authTimeoutMs = AUTH_TIMEOUT_MS, pingIntervalMs = PING_INTERVAL_MS }) {
+  constructor({ store, index, onEvent = () => {}, log = () => {}, version = "", parental = () => ({ enabled: false, rev: 0 }), authTimeoutMs = AUTH_TIMEOUT_MS, pingIntervalMs = PING_INTERVAL_MS }) {
     this.store = store;
     this.index = index;
+    /** deviceId → the `parental` message for that PC (lib/parental.js) */
+    this.parental = parental;
     this.onEvent = onEvent;
     this.log = log;
     this.version = version;
@@ -154,6 +156,8 @@ class Hub {
         return this.result(conn, message);
       case P.MSG.BYE:
         return this.bye(conn, message);
+      case P.MSG.ALERT:
+        return this.alert(conn, message);
       default:
         return undefined;
     }
@@ -217,6 +221,7 @@ class Hub {
 
     conn.deviceId = record.deviceId;
     conn.userId = userId;
+    conn.caps = new Set(device.caps);
     this.active.set(record.deviceId, conn);
 
     const lastSeenAt = record.lastSeenAt ? new Date(record.lastSeenAt).getTime() : 0;
@@ -236,11 +241,12 @@ class Hub {
     this.send(conn, P.MSG.WELCOME, {
       deviceId: record.deviceId,
       name: record.name,
-      owner: { name: key.userName ?? "" },
-      server: { version: this.version, protoMin: P.PROTO_MIN, protoMax: P.PROTO_MAX },
+      owner: { name: key.userName ?? "", id: userId },
+      server: { version: this.version, protoMin: P.PROTO_MIN, protoMax: P.PROTO_MAX, caps: P.CAPS },
       settings: this.clientSettings(),
       created: !message.deviceId,
     });
+    if (conn.caps.has("parental")) this.send(conn, P.MSG.PARENTAL, this.parental(record.deviceId));
     this.onEvent("online", { device: this.index.get(record.deviceId), lastSeenAt });
 
     return undefined;
@@ -307,6 +313,25 @@ class Hub {
     }
     conn.runningApps = running;
     conn.baseline = true;
+    if (state.parental) this.onEvent("parental-usage", { device, usage: state.parental });
+  }
+
+  /** Something the owner should know about a PC under parental control. */
+  alert(conn, message) {
+    const device = this.index.get(conn.deviceId);
+
+    const until = Number(message.until);
+
+    if (device && P.ALERT_KINDS.includes(message.kind)) {
+      this.onEvent("parental-alert", { device, kind: message.kind, until: Number.isFinite(until) ? until : null });
+    }
+  }
+
+  /** New parental rules, unlocks, resets reach the PC at once (only a client that knows them). */
+  sendParental(deviceId, payload) {
+    const conn = this.active.get(deviceId);
+
+    if (conn && !conn.dropping && conn.caps?.has("parental")) this.send(conn, P.MSG.PARENTAL, payload);
   }
 
   result(conn, message) {
@@ -328,6 +353,7 @@ class Hub {
     if (conn.byeReason === "unpair") {
       await this.store.devices.remove(conn.deviceId);
       this.index.remove(conn.deviceId);
+      this.onEvent("removed", { deviceId: conn.deviceId });
       this.drop(conn, 1000, "unpaired");
     }
   }
@@ -411,6 +437,11 @@ class Hub {
 
   kickUser(userId, code, reason = "") {
     for (const conn of [...this.active.values()]) if (conn.userId === String(userId)) this.drop(conn, code, reason);
+  }
+
+  /** Does the connected client of a PC know a newer action or message (protocol CAPS). */
+  supports(deviceId, cap) {
+    return Boolean(this.active.get(deviceId)?.caps?.has(cap));
   }
 
   /** Skill settings the PCs show: from which match NODUS runs an app without asking. */

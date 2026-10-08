@@ -30,14 +30,19 @@ export function createTray(core: Core, showWindow: () => void, quit: () => void)
     tray.setImage(icon(state));
     tray.setToolTip(`Ghost Hands · ${label}`);
     tray.setContextMenu(
-      Menu.buildFromTemplate([
-        { label: t("trayOpen"), click: showWindow },
-        { label, enabled: false },
-        { type: "separator" },
-        { label: core.paused ? t("trayResume") : t("trayPause"), click: () => core.togglePause(), enabled: status !== "unpaired" },
-        { type: "separator" },
-        { label: t("trayQuit"), click: quit },
-      ]),
+      Menu.buildFromTemplate(
+        // under parental control there is nothing to pause or quit
+        core.parental?.enabled
+          ? [{ label: t("trayOpen"), click: showWindow }, { label, enabled: false }, { label: t("trayParental"), enabled: false }]
+          : [
+              { label: t("trayOpen"), click: showWindow },
+              { label, enabled: false },
+              { type: "separator" },
+              { label: core.paused ? t("trayResume") : t("trayPause"), click: () => core.togglePause(), enabled: status !== "unpaired" },
+              { type: "separator" },
+              { label: t("trayQuit"), click: quit },
+            ],
+      ),
     );
   };
 

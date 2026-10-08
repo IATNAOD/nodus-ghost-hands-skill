@@ -25,13 +25,12 @@ class ScenarioEvents {
     this.offlineFired = new Set();
   }
 
-  fire(event, device, payload) {
+  /** @param {object} [options] whose scenarios: by default the owner's, everyone's for a shared PC */
+  fire(event, device, payload, options = device.shared ? {} : { ownerId: device.userId }) {
     const engine = this.ctx?.scenarioEngine;
 
     if (typeof engine?.fireSkillEvent !== "function") return;
     if (Date.now() - this.startedAt < QUIET_MS) return;
-
-    const options = device.shared ? {} : { ownerId: device.userId };
 
     engine
       .fireSkillEvent(this.ctx.skillId, event, { from: device.userId, computer: device.name, ...payload }, options)

@@ -1,7 +1,7 @@
 import { Gauge, Network, Power, Search, Shield, Volume2, XCircle } from "lucide-react";
 import { FEATURES, type SearchEngine, type UiState } from "../../../shared/types";
 import { fill, useTexts } from "../i18n";
-import { Card, Field, NumberInput, SwitchRow } from "../ui";
+import { Card, Field, Locked, NumberInput, SwitchRow } from "../ui";
 
 export function Commands({ state }: { state: UiState }) {
   const t = useTexts();
@@ -16,6 +16,7 @@ export function Commands({ state }: { state: UiState }) {
         </div>
       </div>
 
+      <Locked locked={state.parental.enabled}>
       <Card title={t.featuresTitle} icon={<Gauge />}>
         {FEATURES.map((feature) => (
           <SwitchRow
@@ -63,6 +64,7 @@ export function Commands({ state }: { state: UiState }) {
       <Card title={t.privacyTitle} icon={<Shield />}>
         <SwitchRow title={t.shareRunning} hint={t.shareRunningHint} checked={prefs.shareRunning} onChange={(shareRunning) => window.gh.setPrefs({ shareRunning })} />
       </Card>
+      </Locked>
 
       <Card title={t.wolTitle} icon={<Network />}>
         <p className="hint">{state.wol.mac ? fill(t.wolReady, { mac: state.wol.mac, adapter: state.wol.adapter ?? "" }) : t.wolUnknown}</p>

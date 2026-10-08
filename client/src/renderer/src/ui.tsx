@@ -46,6 +46,15 @@ export function SwitchRow({ title, hint, checked, onChange, disabled }: { title:
   );
 }
 
+/** Under parental control the controls inside are disabled: the owner sets them in the NODUS panel. */
+export function Locked({ locked, children }: { locked: boolean; children: ReactNode }) {
+  return (
+    <fieldset className="locked-area" disabled={locked}>
+      {children}
+    </fieldset>
+  );
+}
+
 export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
     <label className="field">

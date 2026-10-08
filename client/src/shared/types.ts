@@ -99,7 +99,51 @@ export interface UiState {
   helper: { ok: boolean; error: string | null };
   /** the skill this PC talks to: its version (null before the first connection) and match threshold */
   skill: { version: string | null; accept: number };
+  parental: ParentalView;
 }
+
+/** Parental control in short: the main window and the tray. */
+export interface ParentalView {
+  enabled: boolean;
+  granted: boolean;
+  grantUntil: number | null;
+  pcLeftSec: number | null;
+  gamesLeftSec: number | null;
+  locked: "pc" | "games" | null;
+}
+
+export type ParentalKind = "pc" | "games";
+
+export interface ParentalKindStatus {
+  /** today's limit with the extensions; null - no limit */
+  limitSec: number | null;
+  usedSec: number;
+  leftSec: number | null;
+  near: boolean;
+  reached: boolean;
+  extendsLeft: number;
+  extendMinutes: number;
+}
+
+/** What the parental pages (the notice and the lock) show. */
+export interface ParentalPageState {
+  notice: "games-near" | "pc-near" | "games-over" | null;
+  status: { granted: boolean; grantUntil: number | null; pc: ParentalKindStatus; games: ParentalKindStatus } | null;
+  pinSet: boolean;
+  /** seconds before the next PIN try */
+  waitSec: number;
+}
+
+/** window.ghp: the only API of the parental pages. */
+export interface ParentalApi {
+  get(): Promise<ParentalPageState>;
+  extend(kind: ParentalKind): Promise<boolean>;
+  unlock(pin: string): Promise<{ ok: boolean; waitSec: number; noPin?: boolean }>;
+  dismiss(): Promise<void>;
+  onState(listener: () => void): () => void;
+}
+
+export const PARENTAL_IPC = { invoke: "gh:parental", state: "gh:parental-state" } as const;
 
 export interface PairRequest {
   key: string;
@@ -108,6 +152,8 @@ export interface PairRequest {
   host: string;
   port: number;
   autostart: boolean;
+  /** a PC under parental control is paired again only with the PIN */
+  pin?: string;
 }
 
 export type PairResult = { ok: true } | { ok: false; code: string };

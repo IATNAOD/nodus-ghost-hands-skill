@@ -217,7 +217,13 @@ class ParentalService {
 
     if (!texts[kind]) return;
     this.events.fire("parental_alert", device, { text: device.name, alert: kind }, { ownerId: record.userId });
-    this.notify(record.userId, this.t(texts[kind], { pc: device.name })).catch((error) => this.log(`parental notify: ${error.message}`));
+    this.say(record, texts[kind], device);
+  }
+
+  /** The owner hears it, unless voice alerts are off for this PC (the events stay). */
+  say(record, key, device) {
+    if (!P.sanitizeParental(record.rules).voice) return;
+    this.notify(record.userId, this.t(key, { pc: device.name })).catch((error) => this.log(`parental notify: ${error.message}`));
   }
 
   online(device) {
@@ -236,7 +242,7 @@ class ParentalService {
         this.vanish.delete(device.deviceId);
         if (this.hub.isOnline(device.deviceId)) return;
         this.events.fire("parental_alert", device, { text: device.name, alert: "vanished" }, { ownerId: record.userId });
-        this.notify(record.userId, this.t("parental.vanished", { pc: device.name })).catch((error) => this.log(`parental notify: ${error.message}`));
+        this.say(record, "parental.vanished", device);
       } catch (error) {
         this.log(`parental vanish: ${error.message}`);
       }

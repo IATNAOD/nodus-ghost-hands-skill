@@ -12,7 +12,8 @@ const splitAliases = (text: string) =>
     .map((part) => part.trim())
     .filter(Boolean);
 
-function AppRow({ app }: { app: AppView }) {
+/** @param locked under parental control: launching and voice names stay, switching off and removing go */
+function AppRow({ app, locked }: { app: AppView; locked: boolean }) {
   const t = useTexts();
   const toast = useToast();
   const [showSpoken, setShowSpoken] = useState(Boolean(app.spoken));
@@ -21,7 +22,7 @@ function AppRow({ app }: { app: AppView }) {
 
   return (
     <div className={`app-row${app.enabled ? "" : " off"}`}>
-      <Switch checked={app.enabled} onChange={(enabled) => window.gh.setApp(app.id, { enabled })} label={app.name} />
+      <Switch checked={app.enabled} disabled={locked} onChange={(enabled) => window.gh.setApp(app.id, { enabled })} label={app.name} />
       <div className="body">
         <div className="name">
           {app.name}
@@ -61,12 +62,12 @@ function AppRow({ app }: { app: AppView }) {
           onClick={async () => {
             const result = await window.gh.testLaunch(app.id);
 
-            toast(result.ok ? "success" : "error", result.ok ? t.launched : result.code ?? "error");
+            toast(result.ok ? "success" : "error", result.ok ? t.launched : (result.code && t.code[result.code]) ?? result.code ?? "error");
           }}
         >
           <Play />
         </Button>
-        {app.removable && (
+        {app.removable && !locked && (
           <Button variant="ghost" small title={t.remove} onClick={() => window.gh.removeApp(app.id)}>
             <Trash2 />
           </Button>
@@ -354,9 +355,7 @@ export function Apps({ state }: { state: UiState }) {
         </Locked>
       </div>
 
-      <Locked locked={state.parental.enabled}>
-        <div className="app-list">{apps.length ? apps.map((app) => <AppRow key={app.id} app={app} />) : <div className="empty">{t.emptyApps}</div>}</div>
-      </Locked>
+      <div className="app-list">{apps.length ? apps.map((app) => <AppRow key={app.id} app={app} locked={state.parental.enabled} />) : <div className="empty">{t.emptyApps}</div>}</div>
 
       <StartMenuDialog open={startOpen} onClose={() => setStartOpen(false)} />
       <AddDialog type={adding} onClose={() => setAdding(null)} />

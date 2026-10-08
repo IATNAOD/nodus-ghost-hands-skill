@@ -93,6 +93,8 @@
   .games input { accent-color: var(--purple); }
   .games .tag { color: var(--muted); font-size: 11px; }
   .note { font-size: 12px; color: var(--orange); }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .check input { accent-color: var(--purple); width: 16px; height: 16px; margin: 0; }
   .confirm { display: none; padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 92, 122, .45); background: rgba(255, 92, 122, .06); gap: 10px; }
   .confirm.open { display: grid; }
   [hidden] { display: none !important; }
@@ -281,6 +283,9 @@
       pinSet: "PIN задан",
       pinNotSet: "PIN не задан",
       pinSave: "Задать PIN",
+      voiceTitle: "Уведомления",
+      voiceLabel: "NODUS сообщает голосом",
+      voiceHint: "Когда Ghost Hands закрыли принудительно, компьютер пропал из сети, ограничения сняли PIN или PIN ввели неверно. Без голоса остаются события для сценариев: их можно, например, переслать в Telegram.",
       gamesTitle: "Что считается игрой",
       gamesHint: "Игры из Steam, Epic и GOG отмечены сами. Отметьте, что ещё считать игрой.",
       gamesEmpty: "Список появится, когда компьютер пришлёт свои приложения.",
@@ -396,6 +401,9 @@
       pinSet: "PIN is set",
       pinNotSet: "No PIN",
       pinSave: "Set the PIN",
+      voiceTitle: "Alerts",
+      voiceLabel: "NODUS tells by voice",
+      voiceHint: "When Ghost Hands was killed, the computer went missing, the limits were lifted with the PIN or a wrong PIN was entered. Without the voice the scenario events stay: a scenario can forward them, to Telegram for example.",
       gamesTitle: "What counts as a game",
       gamesHint: "Steam, Epic and GOG games are marked already. Mark what else counts as a game.",
       gamesEmpty: "The list appears when the computer sends its apps.",
@@ -670,6 +678,13 @@
     const unlock = num(15, 720, 15);
     const unlockRow = line(el("span", "label", tr("unlockTitle")), unlock, el("span", "hint", tr("minutesShort")));
 
+    // alerts to the owner by voice; off - only the scenario events
+    const voice = el("input");
+    const voiceRow = el("label", "check");
+
+    voice.type = "checkbox";
+    voiceRow.append(voice, el("span", "", tr("voiceLabel")));
+
     // what counts as a game: the PC's apps, Steam/Epic/GOG games marked already
     const games = el("div", "games");
     const filter = el("input", "num");
@@ -692,7 +707,7 @@
       save.disabled = false;
     };
 
-    for (const node of [limits, extend, unlockRow, games]) {
+    for (const node of [limits, extend, unlockRow, voiceRow, games]) {
       node.addEventListener("input", markDirty);
       node.addEventListener("change", markDirty);
     }
@@ -709,11 +724,12 @@
       block(tr("limitsTitle"), limits, el("p", "hint", tr("limitsHint"))),
       block(tr("extendTitle"), extend, el("p", "hint", tr("extendHint"))),
       unlockRow,
+      block(tr("voiceTitle"), voiceRow, el("p", "hint", tr("voiceHint"))),
       block(tr("gamesTitle"), el("p", "hint", tr("gamesHint")), filter, games),
       line(save),
     );
     root.append(head, body);
-    Object.assign(panel, { root, toggle, body, note, stat, badges, revoke, pinState, unlock, games, save });
+    Object.assign(panel, { root, toggle, body, note, stat, badges, revoke, pinState, unlock, voice, games, save });
     return panel;
   }
 
@@ -775,6 +791,7 @@
       panel.fields[`extend.${kind}.times`].value = String(rules.extend[kind].times);
     }
     panel.unlock.value = String(rules.unlockMinutes);
+    panel.voice.checked = rules.voice !== false;
 
     const key = JSON.stringify([view.apps, rules.games]);
 
@@ -810,7 +827,7 @@
       if (box.checked && !box.dataset.game) add.push(box.value);
       if (!box.checked && box.dataset.game) remove.push(box.value);
     }
-    return { limits: { weekday: day("weekday"), weekend: day("weekend") }, extend: { pc: extend("pc"), games: extend("games") }, unlockMinutes: Number(panel.unlock.value) || 120, games: { add, remove } };
+    return { limits: { weekday: day("weekday"), weekend: day("weekend") }, extend: { pc: extend("pc"), games: extend("games") }, unlockMinutes: Number(panel.unlock.value) || 120, voice: panel.voice.checked, games: { add, remove } };
   }
 
   function renderMine() {

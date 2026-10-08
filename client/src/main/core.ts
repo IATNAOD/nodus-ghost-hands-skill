@@ -59,9 +59,11 @@ const systemLanguage = (): Language => (app.getLocale().toLowerCase().startsWith
 const CLIENT_CAPS = ["window.close", "media.control", "parental"];
 /** Under parental control nothing of these changes on the PC: the owner sets it in the panel. */
 const LOCKED_METHODS = new Set([
-  "setDevice", "setServer", "setApp", "addApp", "removeApp", "addStartApps", "pickExecutable", "rescan",
-  "setFeatures", "setPrefs", "setUi", "unpair", "testLaunch",
+  "setDevice", "setServer", "addApp", "removeApp", "addStartApps", "pickExecutable", "rescan",
+  "setFeatures", "setPrefs", "setUi", "unpair",
 ]);
+// under parental control the child still names apps for the voice: setApp with only these
+const OPEN_APP_FIELDS = new Set(["aliases", "spoken"]);
 
 export class Core extends EventEmitter {
   store!: SettingsStore;
@@ -498,6 +500,8 @@ export class Core extends EventEmitter {
       const target = this.catalog.all().find((item) => item.id === id);
 
       if (!target) return { ok: false, code: "app-not-found" };
+      // a launch from the list counts like one by voice: time over - no game
+      if (this.parental.blocksLaunch(target)) return { ok: false, code: "parental-limit" };
 
       const result = await launchApp({ helper: this.helper, catalog: this.catalog, running: this.running, store: this.store }, target);
 
@@ -565,6 +569,9 @@ export class Core extends EventEmitter {
     if (typeof handler !== "function") throw new Error(`unknown method ${String(method)}`);
     // the renderer disables these controls; the check is here, where it cannot be skipped
     if (this.parental.enabled && LOCKED_METHODS.has(method)) throw new Error("parental-locked");
+    if (this.parental.enabled && method === "setApp" && Object.keys((args[1] ?? {}) as object).some((field) => !OPEN_APP_FIELDS.has(field))) {
+      throw new Error("parental-locked");
+    }
 
     return handler(...args);
   }

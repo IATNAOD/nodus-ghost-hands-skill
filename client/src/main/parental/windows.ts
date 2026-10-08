@@ -1,5 +1,5 @@
 import path from "path";
-import { app, BrowserWindow, screen, type WebContents } from "electron";
+import { app, BrowserWindow, screen, type Rectangle, type WebContents } from "electron";
 import { load, type Page } from "../windows";
 import { PARENTAL_IPC } from "../../shared/types";
 
@@ -34,6 +34,8 @@ export interface ParentalWindows {
 export function createParentalWindows({ language }: { language: () => string }): ParentalWindows {
   let notice: BrowserWindow | null = null;
   let locks: BrowserWindow[] = [];
+  // the display each lock window covers
+  const covers = new WeakMap<BrowserWindow, Rectangle>();
   let locked = false;
   let refocus: NodeJS.Timeout | null = null;
 
@@ -51,19 +53,41 @@ export function createParentalWindows({ language }: { language: () => string }):
     return window;
   };
 
+  // Windows fits a new window into the work area: with the taskbar on top or at a side a strip of
+  // the screen stayed open. The bounds and the kiosk mode go on after the window is shown.
+  const cover = (window: BrowserWindow) => {
+    const bounds = covers.get(window);
+
+    if (!bounds || window.isDestroyed()) return;
+    window.setBounds(bounds);
+    window.setKiosk(true);
+  };
+  const covered = (window: BrowserWindow) => {
+    const bounds = covers.get(window);
+    const now = window.getBounds();
+
+    return !bounds || (now.x === bounds.x && now.y === bounds.y && now.width === bounds.width && now.height === bounds.height && window.isFullScreen());
+  };
+
   const coverDisplays = () => {
     for (const window of locks) if (!window.isDestroyed()) window.destroy();
 
     locks = screen.getAllDisplays().map((display) => {
-      const window = open("lock", { ...display.bounds, movable: false, closable: false, focusable: true, fullscreen: true, kiosk: true, alwaysOnTop: true });
+      const window = open("lock", { ...display.bounds, resizable: true, movable: false, closable: false, focusable: true, alwaysOnTop: true });
 
+      covers.set(window, display.bounds);
       window.setAlwaysOnTop(true, "screen-saver");
-      // Alt+F4, minimize: the lock stays
+      // Alt+F4, minimize, Win+Down: the lock stays
       window.on("close", (event) => {
         if (locked) event.preventDefault();
       });
       window.on("minimize", () => window.restore());
-      window.once("ready-to-show", () => window.show());
+      window.on("leave-full-screen", () => locked && cover(window));
+      window.once("ready-to-show", () => {
+        window.setBounds(display.bounds);
+        window.show();
+        cover(window);
+      });
 
       return window;
     });
@@ -113,8 +137,10 @@ export function createParentalWindows({ language }: { language: () => string }):
       if (locked) return;
       locked = true;
       coverDisplays();
-      // Alt+Tab, the Start menu: the lock takes the focus back
+      // Alt+Tab, the Start menu: the lock takes the focus back; a window moved off its display goes back
       refocus = setInterval(() => {
+        for (const window of locks) if (!window.isDestroyed() && window.isVisible() && !covered(window)) cover(window);
+
         const front = locks.find((window) => !window.isDestroyed());
 
         if (front && !locks.some((window) => !window.isDestroyed() && window.isFocused())) {

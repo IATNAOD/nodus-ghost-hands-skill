@@ -287,6 +287,8 @@ const PARENTAL_DEFAULTS = Object.freeze({
   extend: { pc: { minutes: 15, times: 2 }, games: { minutes: 15, times: 2 } },
   unlockMinutes: 120,
   games: { add: [], remove: [] },
+  // alerts to the owner by voice; off - only the scenario events
+  voice: true,
 });
 
 /** What a client reports in `alert`. */
@@ -306,6 +308,7 @@ const sanitizeParental = (raw) => {
     extend: { pc: extend(data.extend?.pc, defaults.extend.pc), games: extend(data.extend?.games, defaults.extend.games) },
     unlockMinutes: int(data.unlockMinutes, 15, 720, defaults.unlockMinutes),
     games: { add: ids(data.games?.add), remove: ids(data.games?.remove) },
+    voice: bool(data.voice, defaults.voice),
   };
 };
 

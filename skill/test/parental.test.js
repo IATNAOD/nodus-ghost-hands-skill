@@ -176,5 +176,15 @@ test("service: usage is kept, alerts reach the owner, a PC that vanishes without
   service.offline(device, null);
   t.mock.timers.tick(VANISH_MS + 1000);
   assert.deepEqual(notes.at(-1), [OWNER, "parental.vanished Детский"]);
+
+  // voice alerts off: NODUS keeps quiet, the scenarios still get the event
+  await service.setRules(device, { voice: false });
+  service.alert(device, "pin-failed");
+  assert.equal(notes.length, 2);
+  assert.deepEqual(events.at(-1), ["parental_alert", { text: "Детский", alert: "pin-failed" }, { ownerId: OWNER }]);
+  service.offline(device, null);
+  t.mock.timers.tick(VANISH_MS + 1000);
+  assert.equal(notes.length, 2);
+  assert.equal(events.at(-1)[1].alert, "vanished");
   service.dispose();
 });

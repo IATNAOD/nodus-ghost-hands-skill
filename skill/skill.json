@@ -2,7 +2,7 @@
   "id": "ghost_hands",
   "name": "skill.name",
   "description": "skill.description",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "IATNAOD",
   "license": "MIT",
   "permissions": ["askUser", "verifyIdentity", "secrets", "notify", "scenarioEngine", "synthesizeText"],

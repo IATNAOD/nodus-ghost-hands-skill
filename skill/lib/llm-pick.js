@@ -15,12 +15,11 @@ const LOCAL_CHOICES = 20;
 // provider, and then timeoutMs is not applied (up to 60 s). Past it NODUS answers without the AI.
 const DEADLINE_MS = { local: 12_000, remote: 8_000 };
 
-/** The value of a promise that never rejects, or null after `ms`. */
+/** The value of a promise that never rejects, or null after `ms`. The timer is not unref'd: it is awaited. */
 const withDeadline = (promise, ms) =>
   new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), ms);
 
-    timer.unref?.();
     promise.then((value) => {
       clearTimeout(timer);
       resolve(value);

@@ -37,6 +37,17 @@ function useSecondsLeft(endsAt: number | null): number {
   return endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : 0;
 }
 
+const RELEASES_URL = "https://github.com/IATNAOD/nodus-ghost-hands-skill/releases/latest";
+
+/** "1.2.0" newer than "1.1.9" */
+const newer = (a: string, b: string): boolean => {
+  const parts = (version: string) => version.split(/[.-]/).map((part) => Number(part) || 0);
+  const [x, y] = [parts(a), parts(b)];
+
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+};
+
 export function Status({ state }: { state: UiState }) {
   const t = useTexts();
   const { connection } = state;
@@ -66,7 +77,12 @@ export function Status({ state }: { state: UiState }) {
               .join(" · ")}
           </span>
           <span className="muted" style={{ fontSize: 12 }}>
-            {fill(t.statusAddress, { address: `${connection.host}:${connection.port}${connection.address && connection.address !== connection.host ? ` (${connection.address})` : ""}` })}
+            {[
+              fill(t.statusAddress, { address: `${connection.host}:${connection.port}${connection.address && connection.address !== connection.host ? ` (${connection.address})` : ""}` }),
+              state.skill.version && fill(t.statusSkill, { version: state.skill.version }),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </div>
         <Button variant="secondary" onClick={() => window.gh.reconnect()}>
@@ -93,6 +109,17 @@ export function Status({ state }: { state: UiState }) {
           <span className="spacer" />
           <Button variant="secondary" onClick={() => window.gh.cancelCountdown()}>
             {t.cancel}
+          </Button>
+        </div>
+      )}
+
+      {state.skill.version && state.skill.version !== state.version && (
+        <div className="banner">
+          <AlertTriangle />
+          <span>{fill(newer(state.version, state.skill.version) ? t.skillOlder : t.appOlder, { skill: state.skill.version, app: state.version })}</span>
+          <span className="spacer" />
+          <Button variant="secondary" onClick={() => window.gh.openExternal(RELEASES_URL)}>
+            {t.openRelease}
           </Button>
         </div>
       )}

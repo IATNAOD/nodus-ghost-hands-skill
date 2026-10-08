@@ -121,6 +121,39 @@ test("2.4: several PCs can do it and none is named - ask which", async () => {
   assert.equal(calls[1].deviceId, "d2");
 });
 
+test("questions wait 10 s, not the 20 s of NODUS: game sounds keep the microphone open", async () => {
+  setup({ devices: [{ id: "d1", config: GAMING }, { id: "d2", config: LAPTOP }] });
+
+  const { ctx } = await say("открой хром", { answers: ["первый"] });
+
+  assert.deepEqual(ctx.calls.askOptions, [{ timeoutMs: 10_000 }]);
+});
+
+test("the answer is always a string: anything else keeps NODUS silent and deaf", async () => {
+  setup({ devices: [{ id: "d1", config: GAMING }] });
+
+  for (const intent of ["constructor", "toString", "nope"]) {
+    assert.equal(await runCommand(fakeCtx(), configs({}), intent, {}), "Не получилось. Попробуй ещё раз.");
+  }
+});
+
+test("app_confidence: a lower threshold runs a close name without asking", async () => {
+  const aoe = { name: "Игровой", apps: [app("steam:813780", "Age of Empires II: Definitive Edition", [], "game")], prefs: {}, features: {} };
+
+  setup({ devices: [{ id: "d1", config: aoe }] });
+
+  const asked = await say("запусти эйдж оф эмпайрс два", { answers: ["да"] });
+
+  assert.deepEqual(asked.ctx.calls.asked, ["Запустить Age of Empires II?"]);
+
+  const { index } = state.get();
+  const direct = await say("запусти эйдж оф эмпайрс два", {}, { app_confidence: 80 });
+
+  assert.equal(index.accept, 0.8);
+  assert.deepEqual(direct.ctx.calls.asked, []);
+  assert.equal(direct.answer, "Запускаю Age of Empires II.");
+});
+
 test("2.4: answers - an ordinal, silence, cancel", async () => {
   setup({ devices: [{ id: "d1", config: GAMING }, { id: "d2", config: LAPTOP }] });
   assert.equal((await say("открой хром", { answers: ["второй"] }, { ask_pc_every_time: true })).answer, "Запускаю Google Chrome на компьютере «Ноутбук».");
@@ -234,6 +267,18 @@ test("close: a stuck app is force-closed after a yes; a generic game", async () 
   assert.equal(stuck.answer, "Закрыл Dota 2 принудительно.");
   assert.deepEqual(calls.map((call) => call.args), [{ appId: "steam:570" }, { appId: "steam:570", force: true }]);
   assert.equal((await say("выключи игру", { female: true })).answer, "Закрыла Dota 2.");
+});
+
+test("close: an app without a window (in the tray) is offered a forced close", async () => {
+  setup({
+    devices: [{ id: "d1", config: GAMING }],
+    replies: { "app.close": (args) => (args.force ? { ok: true, data: { closed: [1] } } : { ok: true, data: { name: "Google Chrome", closed: [], pending: [1], background: true } }) },
+  });
+
+  const { ctx, answer } = await say("закрой хром", { answers: ["нет"] });
+
+  assert.deepEqual(ctx.calls.asked, ["Google Chrome работает в фоне без окна. Закрыть принудительно?"]);
+  assert.equal(answer, "Хорошо, оставляю.");
 });
 
 test("errors of the PC become words", async () => {

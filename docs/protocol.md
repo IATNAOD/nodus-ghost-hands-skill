@@ -27,8 +27,12 @@
 
 ```json
 { "t": "welcome", "deviceId": "rzvp9IBAg3_W", "name": "Игровой", "owner": { "name": "Маша" },
-  "server": { "version": "1.0.0", "protoMin": 1, "protoMax": 1 }, "created": true }
+  "server": { "version": "1.0.0", "protoMin": 1, "protoMax": 1 },
+  "settings": { "match": { "accept": 0.86 } }, "created": true }
 ```
+
+- `server.version` — версия навыка. Навык и клиент выпускаются вместе с одной версией: клиент показывает, если версии разошлись.
+- `settings` — настройки навыка, нужные клиенту (тот же объект приходит сообщением `settings`). `match.accept` — совпадение названия (0–1), с которого NODUS запускает и закрывает приложение без уточнения (настройка навыка `app_confidence`); по нему клиент проверяет фразы.
 
 После `welcome` клиент сразу шлёт `config` и `state`.
 
@@ -42,6 +46,7 @@
 | С → К | `cmd` | `id`, `action`, `args`, `timeoutMs` |
 | К → С | `result` | `id`, `ok`, `code`, `data` |
 | С → К | `learn` | `appId`, `alias` — голосовое название, подтверждённое человеком после подбора ИИ: клиент добавляет его к приложению и шлёт новый `config` |
+| С → К | `settings` | `match: { accept }` — после смены настроек навыка, всем подключённым ПК |
 | К → С | `bye` | `reason`: `quit`, `sleep`, `unpair` (при `unpair` сервер удаляет ПК) |
 
 Первый `config` соединения принимается при любом `rev` (переустановленный клиент начинает счёт заново), следующие — только с большим `rev`.
@@ -70,7 +75,7 @@
 | `action` | `args` | `data` при успехе | Возможность |
 |---|---|---|---|
 | `app.launch` | `{ appId }` | `{ already }` | `launch` |
-| `app.close` | `{ appId }` или `{ key }` или `{ target: "game" \| "foreground" }`, `force?` | `{ name, closed: [pid], pending: [pid] }` (`pending` — не закрылись мягко) | `close` |
+| `app.close` | `{ appId }` или `{ key }` или `{ target: "game" \| "foreground" }`, `force?` | `{ name, closed: [pid], pending: [pid] }`: `closed` — процессы, которые завершились или закрыли окна (игра может ещё сохраняться), `pending` — окна остались открыты: программа не закрылась или спрашивает о сохранении | `close` |
 | `volume.get` | — | `{ level, muted }` | `volume` |
 | `volume.set` | `{ level }` 0–100 | `{ level, muted }` | `volume` |
 | `volume.change` | `{ delta }` | `{ level, muted }` | `volume` |

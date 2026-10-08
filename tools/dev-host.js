@@ -139,12 +139,27 @@ async function main() {
   panel:      http://localhost:${panelPort}/
   key:        ${key}
   fake PC:    node tools/fake-client.js --key ${key} --port ${skill.server.address()}
-Say a phrase (empty line - exit):`);
+Say a phrase; ":set <setting> <value>" changes a skill setting (":set app_confidence 80"); empty line - exit:`);
     rl.prompt();
   });
 
+  // device settings of the skill, as the panel would save them
+  let devConfigs = [];
+
   rl.on("line", async (line) => {
     const text = line.trim();
+    const setting = text.match(/^:set\s+(\w+)\s+(.+)$/);
+
+    if (setting) {
+      const [, key, raw] = setting;
+      const value = raw === "true" ? true : raw === "false" ? false : Number.isFinite(Number(raw)) ? Number(raw) : raw;
+
+      devConfigs = [...devConfigs.filter((entry) => entry.key !== key), { key, value }];
+      skill.onConfigChange(devConfigs);
+      console.log(`settings: ${JSON.stringify(Object.fromEntries(devConfigs.map((entry) => [entry.key, entry.value])))}`);
+      rl.prompt();
+      return;
+    }
 
     if (!text) {
       await skill.destroy();
@@ -164,7 +179,7 @@ Say a phrase (empty line - exit):`);
         console.log("(не наша фраза: NODUS отдал бы её другому навыку или ИИ)");
       } else {
         console.log(`[${intent}${parsed ? ` ${parsed.score}` : ""}] ${parsed ? JSON.stringify(parsed.params) : ""}`);
-        console.log(`NODUS: ${(await runCommand(commandCtx(text), [], intent, parsed?.params ?? {})) || "(молчит)"}`);
+        console.log(`NODUS: ${(await runCommand(commandCtx(text), devConfigs, intent, parsed?.params ?? {})) || "(молчит)"}`);
       }
     } catch (error) {
       console.error(`! ${error.stack}`);

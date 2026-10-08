@@ -33,7 +33,13 @@ export interface Welcome {
   name: string;
   owner: { name: string };
   server: { version: string; protoMin: number; protoMax: number };
+  /** skill settings the PC needs; also sent as a "settings" message after a change */
+  settings?: SkillSettings;
   created: boolean;
+}
+
+export interface SkillSettings {
+  match?: { accept?: number };
 }
 
 /**

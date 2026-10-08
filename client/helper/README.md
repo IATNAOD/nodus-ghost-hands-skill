@@ -117,7 +117,7 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `windows.watch` | `{intervalMs:2000}` | `{}` then `{"event":"windows","data":[...]}` on change (first snapshot immediately) |
 | `windows.unwatch` | — | `{}` |
 | `process.list` | `{underDirs:[], exes:[]}` | `[{pid, ppid, exe, name}]` (both empty → all with a readable path) |
-| `process.close` | `{pids:[], softMs:3000}` | `{closed:[], pending:[]}` (posts WM_CLOSE to visible top-level windows) |
+| `process.close` | `{pids:[], softMs:5000}` | `{closed:[], hidden:[], pending:[], windowless:[]}`: posts WM_CLOSE to visible top-level windows and waits until the processes that had a window exited (`closed`) or have none left (`hidden`: a game still saving, an app in the tray); a window still open after `softMs` is `pending`; `windowless` had nothing to close |
 | `process.kill` | `{pids:[], tree:bool}` | `{killed:[], failed:[{pid, code}]}` |
 | `process.start` | `{path, args?, cwd?}` | `{pid:number|null}` (ShellExecute; supports shortcuts & UAC) |
 | `foreground.allow` | — | `{}` (`AllowSetForegroundWindow(ASFW_ANY)`) |

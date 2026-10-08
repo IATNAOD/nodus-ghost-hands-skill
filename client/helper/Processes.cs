@@ -145,9 +145,16 @@ namespace GhostHelper
         }
 
         // ---- process.close ----
+        // Like the close button: WM_CLOSE to the windows, then wait until every process that
+        // had a window either exited or has no window left. A game often saves for a while
+        // after its window is gone, an app may stay in the tray: both count as closed.
+        //   closed     - exited
+        //   hidden     - alive without a window now (finishing, or in the tray)
+        //   pending    - a window is still open: the app refused or asks to save
+        //   windowless - had no window to close (protected processes go to pending)
         public static Dictionary<string, object> Close(List<int> pids, int softMs, int selfPid, int parentPid)
         {
-            if (softMs <= 0) softMs = 3000;
+            if (softMs <= 0) softMs = 5000;
             var rows = Snapshot();
             var names = NameMap(rows);
 
@@ -158,6 +165,8 @@ namespace GhostHelper
                 if (IsProtected(pid, selfPid, parentPid, names)) { pending.Add(pid); continue; }
                 targets.Add(pid);
             }
+
+            var withWindows = PidsWithWindows(targets);
 
             // Post WM_CLOSE to each visible top-level window of the target processes.
             Native.EnumWindows((hWnd, lParam) =>
@@ -172,30 +181,50 @@ namespace GhostHelper
                 return true;
             }, IntPtr.Zero);
 
-            // Wait (shared deadline) for the targets to exit.
-            var closed = new List<int>();
-            var stillOpen = new List<int>(targets);
+            // Wait (shared deadline) until the windows are gone.
+            var waiting = new List<int>(withWindows);
             long deadline = Environment.TickCount + softMs;
-            while (stillOpen.Count > 0 && Environment.TickCount < deadline)
+            while (waiting.Count > 0 && Environment.TickCount < deadline)
             {
-                for (int i = stillOpen.Count - 1; i >= 0; i--)
-                {
-                    if (HasExited(stillOpen[i]))
-                    {
-                        closed.Add(stillOpen[i]);
-                        stillOpen.RemoveAt(i);
-                    }
-                }
-                if (stillOpen.Count == 0) break;
                 System.Threading.Thread.Sleep(100);
+                var stillShown = PidsWithWindows(new HashSet<int>(waiting));
+                waiting.RemoveAll(pid => HasExited(pid) || !stillShown.Contains(pid));
             }
-            pending.AddRange(stillOpen);
+
+            var closed = new List<int>();
+            var hidden = new List<int>();
+            var windowless = new List<int>();
+            var shown = PidsWithWindows(targets);
+            foreach (int pid in targets)
+            {
+                if (HasExited(pid)) closed.Add(pid);
+                else if (shown.Contains(pid)) pending.Add(pid);
+                else hidden.Add(pid);
+                if (!withWindows.Contains(pid)) windowless.Add(pid);
+            }
 
             return new Dictionary<string, object>
             {
                 ["closed"] = closed,
-                ["pending"] = pending
+                ["hidden"] = hidden,
+                ["pending"] = pending,
+                ["windowless"] = windowless
             };
+        }
+
+        // Processes of the set that show a window a person sees (the same filter as windows.list).
+        private static HashSet<int> PidsWithWindows(HashSet<int> pids)
+        {
+            var found = new HashSet<int>();
+            if (pids.Count == 0) return found;
+            Native.EnumWindows((hWnd, lParam) =>
+            {
+                uint wpid;
+                Native.GetWindowThreadProcessId(hWnd, out wpid);
+                if (pids.Contains((int)wpid) && Windows.IsRealTopLevelWindow(hWnd)) found.Add((int)wpid);
+                return true;
+            }, IntPtr.Zero);
+            return found;
         }
 
         private static string ClassOf(IntPtr hWnd)

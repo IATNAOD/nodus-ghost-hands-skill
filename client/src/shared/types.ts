@@ -97,6 +97,8 @@ export interface UiState {
   update: UpdateState;
   log: CommandLogEntry[];
   helper: { ok: boolean; error: string | null };
+  /** the skill this PC talks to: its version (null before the first connection) and match threshold */
+  skill: { version: string | null; accept: number };
 }
 
 export interface PairRequest {

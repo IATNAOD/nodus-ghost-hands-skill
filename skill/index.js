@@ -66,6 +66,7 @@ class GhostHands {
       onEvent: (type, data) => this.onHubEvent(type, data),
     });
     this.server = new Server({ hub: this.hub, log: trace });
+    this.applyMatchSettings(this.settings);
 
     state.set({ skill: this, index: this.index, hub: this.hub });
     // listening is background work: a busy port must not stop the skill from loading
@@ -81,10 +82,16 @@ class GhostHands {
 
       this.configs = configs;
       this.settings = next;
+      this.applyMatchSettings(next);
       if (portChanged && this.server && this.options.port === undefined) this.server.restart(next.port).catch((error) => trace(`restart: ${error.message}`));
     } catch (error) {
       trace(`settings: ${error.message}`);
     }
+  }
+
+  /** The "run without asking" threshold: the name index and the PCs' phrase check use it. */
+  applyMatchSettings(settings) {
+    if (this.index?.setAccept(settings.acceptScore)) this.hub?.broadcastSettings();
   }
 
   onHubEvent(type, data) {

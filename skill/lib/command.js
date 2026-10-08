@@ -8,7 +8,7 @@
 const state = require("./state");
 const { classify } = require("./parse");
 const { readSettings } = require("./settings");
-const { resolveActor, choosePc } = require("./select");
+const { resolveActor, choosePc, ASK_TIMEOUT_MS } = require("./select");
 const { answerKind, isCancel } = require("./confirm");
 const { spokenName, prepare, scoreApp, appKey } = require("./names");
 const { ordinalOf } = require("./text");
@@ -27,6 +27,8 @@ const POWER_ACTIONS = {
 const POWER_FEATURES = { lock: "lock", display_off: "display" };
 const CONFIRMED_POWER = new Set(["shutdown", "restart"]);
 const MAX_DELAY_SEC = 24 * 3600;
+// a longer command is logged with its time: until it answers, NODUS does not hear its wake word
+const SLOW_MS = 4000;
 
 const ERROR_KEYS = new Set([
   "offline", "timeout", "disconnected", "feature-disabled", "paused", "app-not-found", "launcher-missing",
@@ -46,7 +48,7 @@ const failure = (env, device, result, name = "") =>
 const ask = async (env, question) => {
   if (typeof env.ctx.askUser !== "function") return null;
 
-  const answer = await env.ctx.askUser(question).catch(() => null);
+  const answer = await env.ctx.askUser(question, { timeoutMs: ASK_TIMEOUT_MS }).catch(() => null);
 
   return answer?.text ? answer.text : null;
 };
@@ -135,7 +137,10 @@ async function resolveApp(env, spoken, scope, { running = false, verb = "launch"
   // nobody matched: the AI may know that "ведьмак" is "The Witcher"
   if (env.settings.aiNames) {
     const choices = uniqueApps(scope, running);
+    const started = Date.now();
     const picked = await pickApp(env.ctx, spoken, choices);
+
+    trace(`ai pick "${spoken}": ${picked ? picked.name : "none"} in ${Date.now() - started} ms`);
 
     if (picked) {
       const answer = await confirm(env, t(env, verb === "close" ? "intents.close_app.confirm" : "intents.launch_app.confirm", { name: picked.name }));
@@ -383,7 +388,9 @@ async function closeAnswer(env, actor, device, pool, result, args, name) {
   const closedName = name ?? (typeof result.data?.name === "string" ? result.data.name : "");
 
   if (Array.isArray(result.data?.pending) && result.data.pending.length) {
-    const answer = await confirm(env, t(env, "intents.close_app.stuck", { name: closedName }));
+    // a window that stayed open, or a program with no window at all (in the tray)
+    const question = result.data.background === true ? "intents.close_app.background" : "intents.close_app.stuck";
+    const answer = await confirm(env, t(env, question, { name: closedName }));
 
     if (answer !== "yes") return t(env, answer === "silence" ? "common.not_heard" : "intents.close_app.kept", { name: closedName });
 
@@ -675,6 +682,9 @@ async function runCommand(ctx, configs, intent, rawParams, { via = "voice" } = {
 
   const { skill, index, hub } = loaded;
   const settings = readSettings(Array.isArray(configs) && configs.length ? configs : skill.configs);
+
+  // the settings of this command: onConfigChange may not have come yet
+  if (index.setAccept(settings.acceptScore)) hub.broadcastSettings?.();
   let params = rawParams && typeof rawParams === "object" && !Array.isArray(rawParams) ? rawParams : {};
 
   // chosen by the built-in model or matched without params: parse the phrase here
@@ -685,27 +695,30 @@ async function runCommand(ctx, configs, intent, rawParams, { via = "voice" } = {
   }
 
   const env = { ctx, settings, index, hub, skill, via };
+  const started = Date.now();
 
-  switch (intent) {
-    case "launch_app":
-      return launchFlow(env, params);
-    case "close_app":
-      return closeFlow(env, params);
-    case "pc_power":
-      return powerFlow(env, params);
-    case "pc_wake":
-      return wakeFlow(env, params);
-    case "pc_volume":
-      return volumeFlow(env, params);
-    case "pc_media":
-      return mediaFlow(env, params);
-    case "pc_search":
-      return searchFlow(env, params);
-    case "pc_status":
-      return statusFlow(env, params);
-    default:
-      return ctx.t("errors.internal");
+  try {
+    // a string in every case: any other value leaves NODUS silent and deaf for 15 s or more
+    const flow = Object.hasOwn(FLOWS, intent) ? FLOWS[intent] : null;
+    const answer = flow ? await flow(env, params) : null;
+
+    return typeof answer === "string" ? answer : ctx.t("common.failed");
+  } finally {
+    const ms = Date.now() - started;
+
+    if (ms > SLOW_MS) trace(`${intent} (${via}) answered in ${ms} ms`);
   }
 }
+
+const FLOWS = {
+  launch_app: launchFlow,
+  close_app: closeFlow,
+  pc_power: powerFlow,
+  pc_wake: wakeFlow,
+  pc_volume: volumeFlow,
+  pc_media: mediaFlow,
+  pc_search: searchFlow,
+  pc_status: statusFlow,
+};
 
 module.exports = { runCommand, resolveApp, delayVars, POWER_ACTIONS };

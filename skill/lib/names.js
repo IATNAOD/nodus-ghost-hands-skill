@@ -444,9 +444,13 @@ const scoreApp = (spokenTokens, prepared) => {
  * identifies the thing (the same app on two PCs has one key).
  * Among close scores the only name said in full wins: "контрол" is "Control",
  * not "NVIDIA Control Panel"; "дип рок" stays a question.
+ * @param {object[]} candidates
+ * @param {{ accept?: number }} [options] accept - score that runs without a question
+ *   (the skill setting app_confidence); below it, down to WEAK, NODUS asks to confirm
  * @returns {{ status: "match"|"weak"|"ambiguous"|"none", best: object|null, options: object[] }}
  */
-const decide = (candidates) => {
+const decide = (candidates, { accept = ACCEPT } = {}) => {
+  const weak = Math.min(WEAK, accept);
   const byKey = new Map();
 
   for (const candidate of candidates) {
@@ -458,9 +462,9 @@ const decide = (candidates) => {
   const sorted = [...byKey.values()].sort((a, b) => b.score - a.score || (b.coverage ?? 0) - (a.coverage ?? 0));
   let [best] = sorted;
 
-  if (!best || best.score < WEAK) return { status: "none", best: best ?? null, options: [] };
+  if (!best || best.score < weak) return { status: "none", best: best ?? null, options: [] };
 
-  let close = sorted.filter((candidate) => best.score - candidate.score < GAP && candidate.score >= WEAK);
+  let close = sorted.filter((candidate) => best.score - candidate.score < GAP && candidate.score >= weak);
 
   if (close.length > 1) {
     const full = close.filter((candidate) => (candidate.coverage ?? 0) >= 1);
@@ -469,9 +473,9 @@ const decide = (candidates) => {
     best = full[0];
     close = [best];
   }
-  if (best.score >= ACCEPT) return { status: "match", best, options: [best] };
+  if (best.score >= accept) return { status: "match", best, options: [best] };
 
-  const second = sorted.find((candidate) => candidate !== best && candidate.score >= WEAK);
+  const second = sorted.find((candidate) => candidate !== best && candidate.score >= weak);
 
   return { status: "weak", best, options: second ? [best, second] : [best] };
 };

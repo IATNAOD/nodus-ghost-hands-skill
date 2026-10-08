@@ -7,7 +7,10 @@
 "use strict";
 
 const { stemWord } = require("./nodus-routing");
-const { prepare, prepareApp, scoreApp, decide, appKey } = require("./names");
+const { prepare, prepareApp, scoreApp, decide, appKey, ACCEPT } = require("./names");
+
+/** Lowest "run without asking" score: candidates below 0.6 are not even considered. */
+const MIN_ACCEPT = 0.6;
 const { PC_WORDS } = require("./text");
 
 const EMPTY_STATE = Object.freeze({ running: [], volume: null, muted: null, shutdownAt: null });
@@ -50,6 +53,19 @@ class NameIndex {
     /** @type {Map<string, object>} */
     this.devices = new Map();
     this.version = 0;
+    /** score from which a spoken name runs without a question (setting app_confidence) */
+    this.accept = ACCEPT;
+  }
+
+  /** @param {number} value 0.6..1 */
+  setAccept(value) {
+    const accept = Math.min(1, Math.max(MIN_ACCEPT, Number(value) || ACCEPT));
+
+    if (accept === this.accept) return false;
+    this.accept = accept;
+    this.version++;
+
+    return true;
   }
 
   /**
@@ -216,7 +232,7 @@ class NameIndex {
       }
     }
 
-    return { ...decide(candidates), candidates };
+    return { ...decide(candidates, { accept: this.accept }), candidates };
   }
 }
 

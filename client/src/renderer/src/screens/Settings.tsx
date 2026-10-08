@@ -102,10 +102,11 @@ export function Settings({ state }: { state: UiState }) {
 
       <Card>
         <div className="row">
-          <Button variant="ghost" onClick={() => window.gh.openLogs()}>
+          <Button variant="ghost" onClick={() => window.gh.openLogs()} title={t.logsHint}>
             <FileText />
             {t.logs}
           </Button>
+          <span className="hint">{t.logsHint}</span>
           <span className="spacer" />
           {confirmUnpair ? (
             <>

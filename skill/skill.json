@@ -75,6 +75,16 @@
       "defaultValue": false
     },
     {
+      "type": "input",
+      "dataType": "number",
+      "name": "app_confidence",
+      "label": "configSchema.app_confidence.label",
+      "description": "configSchema.app_confidence.description",
+      "min": 60,
+      "max": 100,
+      "defaultValue": 86
+    },
+    {
       "type": "checkbox",
       "name": "ai_names",
       "label": "configSchema.ai_names.label",

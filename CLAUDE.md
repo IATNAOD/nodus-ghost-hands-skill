@@ -28,8 +28,9 @@ npm test                          # тесты навыка (node:test)
 npm run routing:assert            # маршрутизация фраз против встроенных интентов NODUS
 npm run check                     # проверка манифеста (из гайда)
 npm run pack                      # dist/ghost_hands-<версия>.zip
-npm run dev-host                  # навык без устройства: WS-сервер, мини-панель :8080, консоль фраз
+npm run dev-host                  # навык без устройства: WS-сервер, мини-панель :8080, консоль фраз и `:set <настройка> <значение>`
 npm run fake-client -- --key GH-… # эмулятор ПК
+npm run release -- patch|minor|major|X.Y.Z [--dry-run] # общая версия, коммит, тег vX.Y.Z, push
 NODUS_URL=http://<ip> NODUS_USER=admin NODUS_PASSWORD=… node tools/dev-install.js dist/ghost_hands-1.0.0.zip
 npm --prefix client run dev|test|typecheck|build|dist
 npm --prefix client run helper    # GhostHelper.exe → client/resources/helper (нужен .NET SDK)
@@ -41,8 +42,10 @@ npm --prefix client run icons     # client/build/icon.ico и client/resources/ic
 - Чистые функции (разбор VDF, сканеры Steam/Epic/GOG, `belongsTo`, `dictionaryAliases`, `broadcastOf`) не импортируют `electron` и `../log`: так их проверяет vitest без моков. Фикстуры в `client/test/fixtures` — настоящие файлы без идентификаторов владельца.
 - Окно получает только методы `GhostApi` (`src/shared/types.ts`); новый метод — в тип, `preload/index.ts`, `METHODS` в `main/index.ts` и `Core.api`.
 - Если Electron стартует как Node (`electron.app` undefined), в окружении стоит `ELECTRON_RUN_AS_NODE=1`: сними её для дочернего процесса.
-- Автообновление читает только релиз с пометкой Latest: релизы навыка (`skill-v…`) лежат в том же репозитории, поэтому prerelease-каналов нет.
+- Запуск из исходников (`npm run dev`, e2e) использует профиль `%APPDATA%\Ghost Hands (dev)`: установленный клиент может работать одновременно, второй экземпляр с тем же профилем отдал бы ему ссылку привязки и закрылся.
+- Автообновление читает релиз с пометкой Latest; prerelease-каналов нет.
+- Навык сообщает клиенту в `welcome` и сообщением `settings` порог совпадения названий (`app_confidence`): «Проверить фразу» в клиенте решает так же, как навык.
 
 ## Версии
 
-Клиент и навык версионируются независимо: тег `vX.Y.Z` — релиз клиента (Latest, автообновление; версия = `client/package.json`), `skill-vX.Y.Z` — ZIP навыка (`--latest=false`; версия = `skill/skill.json`). Workflow проверяет совпадение тега и версии. Обновление включённого навыка выключает сценарии людей с его блоками — выпускай навык только при изменениях в нём.
+Навык и клиент выпускаются вместе с одной версией: `npm run release` пишет её в `package.json` (корень и клиент, с lock-файлами) и `skill/skill.json`, коммитит `Release vX.Y.Z` и пушит тег `vX.Y.Z`. Тег запускает `.github/workflows/release.yml`: проверка, что версии совпадают с тегом, сборка ZIP навыка и установщика клиента, один релиз с пометкой Latest (из него обновляются клиенты). Клиент показывает, если версия навыка в NODUS отличается от его собственной. Обновление включённого навыка выключает сценарии людей с его блоками: об этом стоит писать в описании релиза, когда в навыке есть изменения.

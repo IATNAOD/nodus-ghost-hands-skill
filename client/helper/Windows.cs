@@ -94,7 +94,7 @@ namespace GhostHelper
 
         // A "real" window: visible, unowned, not a tool window, not cloaked,
         // with a non-empty title, and not a shell window.
-        private static bool IsRealTopLevelWindow(IntPtr hWnd)
+        internal static bool IsRealTopLevelWindow(IntPtr hWnd)
         {
             if (!Native.IsWindowVisible(hWnd)) return false;
             if (Native.GetWindow(hWnd, Native.GW_OWNER) != IntPtr.Zero) return false;

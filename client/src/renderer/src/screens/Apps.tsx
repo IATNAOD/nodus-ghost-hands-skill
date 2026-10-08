@@ -256,7 +256,7 @@ function PhraseResult({ result }: { result: PhraseCheck }) {
   );
 }
 
-function PhraseTester() {
+function PhraseTester({ accept }: { accept: number }) {
   const t = useTexts();
   const [text, setText] = useState("");
   const [result, setResult] = useState<PhraseCheck | null>(null);
@@ -281,6 +281,7 @@ function PhraseTester() {
         </Button>
       </div>
       {result && (result.intent ? <PhraseResult result={result} /> : <p className="hint">{t.phraseNone}</p>)}
+      <p className="hint">{fill(t.phraseAccept, { percent: Math.round(accept * 100) })}</p>
     </Card>
   );
 }
@@ -318,7 +319,7 @@ export function Apps({ state }: { state: UiState }) {
         </div>
       </div>
 
-      <PhraseTester />
+      <PhraseTester accept={state.skill.accept} />
 
       <div className="toolbar">
         <div className="row" style={{ position: "relative" }}>

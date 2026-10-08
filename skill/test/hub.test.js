@@ -334,6 +334,26 @@ test("the server refuses browsers, wrong paths and plain HTTP", async (t) => {
   assert.equal(status, 426);
 });
 
+test("settings: the match threshold comes with welcome and after a change", async (t) => {
+  const s = await stack();
+
+  t.after(() => shutdown(s));
+
+  const pc = client(s.url);
+
+  await pc.opened;
+  hello(pc, s.keys[U1]);
+
+  const welcome = await pc.next(P.MSG.WELCOME);
+
+  assert.deepEqual(welcome.settings, { match: { accept: 0.86 } });
+
+  s.index.setAccept(0.8);
+  s.hub.broadcastSettings();
+  assert.deepEqual((await pc.next(P.MSG.SETTINGS)).match, { accept: 0.8 });
+  pc.ws.close();
+});
+
 test("dispose closes the PCs with going-away", async () => {
   const s = await stack();
   const pc = client(s.url);

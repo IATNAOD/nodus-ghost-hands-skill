@@ -45,7 +45,8 @@ protocols:
   - name: Ghost Hands
     schemes: [ghosthands]
 
-# releases of IATNAOD/nodus-ghost-hands-skill: client tags vX.Y.Z are "Latest" and carry latest.yml
+# releases of IATNAOD/nodus-ghost-hands-skill (tag vX.Y.Z, marked Latest) carry latest.yml;
+# the release workflow uploads them, electron-builder only builds (--publish never)
 publish:
   provider: github
   owner: IATNAOD

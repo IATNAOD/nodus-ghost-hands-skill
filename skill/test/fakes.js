@@ -58,7 +58,7 @@ const fakeCtx = ({
   llm = null,
   canExternal = true,
 } = {}) => {
-  const calls = { asked: [], notify: [], events: [], spoken: [], require: 0, requireVerified: 0 };
+  const calls = { asked: [], askOptions: [], notify: [], events: [], spoken: [], require: 0, requireVerified: 0 };
   const queue = [...answers];
   const user = {
     id: userId,
@@ -80,8 +80,9 @@ const fakeCtx = ({
     },
   };
   const providers = {
-    askUser: async (question) => {
+    askUser: async (question, options) => {
       calls.asked.push(question);
+      calls.askOptions.push(options);
 
       const answer = queue.length ? queue.shift() : null;
 

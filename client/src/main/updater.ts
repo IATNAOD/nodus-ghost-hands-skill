@@ -10,10 +10,10 @@ const CHECK_EVERY_MS = 4 * 3600_000;
 const IDLE_MS = 10 * 60_000;
 
 /**
- * Updates from GitHub Releases (IATNAOD/nodus-ghost-hands-skill, see electron-builder.yml).
- * Only the release marked Latest is read: skill releases (skill-v…) share the repository,
- * so prereleases stay off. Downloads in the background; with automatic updates on, installs
- * on quit or silently when nothing happened for 10 minutes.
+ * Updates from GitHub Releases (IATNAOD/nodus-ghost-hands-skill, see electron-builder.yml):
+ * the release marked Latest, the one `npm run release` makes for the skill and the client.
+ * Downloads in the background; with automatic updates on, installs on quit or silently
+ * when nothing happened for 10 minutes.
  */
 export class Updater extends EventEmitter {
   state: UpdateState = { status: app.isPackaged ? "idle" : "disabled", version: null, percent: null, error: null };

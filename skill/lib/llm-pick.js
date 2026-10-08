@@ -9,14 +9,32 @@
 const { prepare, scoreApp } = require("./names");
 
 const MAX_CHOICES = 60;
+// the built-in model reads a long prompt slowly (about a minute for a few thousand tokens)
+const LOCAL_CHOICES = 20;
+// the whole pick, queue included: the built-in model may also stand in for an unreachable
+// provider, and then timeoutMs is not applied (up to 60 s). Past it NODUS answers without the AI.
+const DEADLINE_MS = { local: 12_000, remote: 8_000 };
+
+/** The value of a promise that never rejects, or null after `ms`. */
+const withDeadline = (promise, ms) =>
+  new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+
+    timer.unref?.();
+    promise.then((value) => {
+      clearTimeout(timer);
+      resolve(value);
+    });
+  });
 
 /**
  * @param {object} ctx request ctx (its llm is the model chosen for the skill or intent)
  * @param {string} spoken what was said: "ведьмака"
  * @param {{ key: string, name: string, app: object }[]} choices unique apps of the PCs in scope
+ * @param {{ deadlineMs?: number }} [options]
  * @returns {Promise<object|null>} the chosen element of `choices` or null
  */
-async function pickApp(ctx, spoken, choices) {
+async function pickApp(ctx, spoken, choices, { deadlineMs } = {}) {
   if (!choices.length || !spoken) return null;
 
   let llm = ctx.llm;
@@ -32,7 +50,7 @@ async function pickApp(ctx, spoken, choices) {
   const ranked = choices
     .map((choice) => ({ choice, score: tokens.length ? scoreApp(tokens, choice.app).score : 0 }))
     .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_CHOICES)
+    .slice(0, llm.isLocal ? LOCAL_CHOICES : MAX_CHOICES)
     .map(({ choice }) => choice);
   const names = [...new Set(ranked.map((choice) => choice.name))];
 
@@ -45,14 +63,18 @@ async function pickApp(ctx, spoken, choices) {
     },
     required: ["app"],
   };
-  const result = await llm
-    .structured(ctx.t("prompts.app_pick", { phrase: spoken }), schema, {
-      system: ctx.t("prompts.app_pick_system"),
-      temperature: 0,
-      maxTokens: 60,
-      timeoutMs: llm.isLocal ? 20000 : 8000,
-    })
+  const deadline = deadlineMs ?? (llm.isLocal ? DEADLINE_MS.local : DEADLINE_MS.remote);
+  const request = Promise.resolve()
+    .then(() =>
+      llm.structured(ctx.t("prompts.app_pick", { phrase: spoken }), schema, {
+        system: ctx.t("prompts.app_pick_system"),
+        temperature: 0,
+        maxTokens: 60,
+        timeoutMs: deadline,
+      }),
+    )
     .catch(() => null);
+  const result = await withDeadline(request, deadline);
   const name = typeof result?.app === "string" ? result.app : "";
 
   if (!name || name === "none") return null;
@@ -60,4 +82,4 @@ async function pickApp(ctx, spoken, choices) {
   return ranked.find((choice) => choice.name === name) ?? null;
 }
 
-module.exports = { pickApp, MAX_CHOICES };
+module.exports = { pickApp, MAX_CHOICES, LOCAL_CHOICES, DEADLINE_MS };

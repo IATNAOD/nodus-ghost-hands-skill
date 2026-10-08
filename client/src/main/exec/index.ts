@@ -25,6 +25,8 @@ export interface Command {
   id: string;
   action: string;
   args?: Record<string, unknown>;
+  /** how long the skill waits for the result */
+  timeoutMs?: number;
 }
 
 const num = (value: unknown, min: number, max: number): number | null => {
@@ -53,14 +55,14 @@ export class Dispatcher {
     if (settings.prefs.paused) return fail("paused");
 
     try {
-      return await this.run(command.action, args);
+      return await this.run(command.action, args, Number(command.timeoutMs) || 8000);
     } catch (error) {
       log.error(`${command.action}: ${(error as Error).message}`);
       return fail(error instanceof HelperError ? (error.code === "helper-timeout" ? "helper-unavailable" : error.code) : "internal");
     }
   }
 
-  private async run(action: string, args: Record<string, unknown>): Promise<Result> {
+  private async run(action: string, args: Record<string, unknown>, timeoutMs: number): Promise<Result> {
     const { helper, store } = this.deps;
     const delaySec = num(args.delaySec, 0, 86400) ?? 0;
 
@@ -71,7 +73,8 @@ export class Dispatcher {
         return app ? launchApp(this.deps, app) : fail("app-not-found");
       }
       case "app.close":
-        return closeApp(this.deps, args);
+        // the answer must reach the skill in time: finding the processes takes a moment too
+        return closeApp(this.deps, args, Math.min(5000, Math.max(1500, timeoutMs - 2500)));
       case "volume.get":
         return ok(await helper.call("volume.get"));
       case "volume.set": {

@@ -1,5 +1,6 @@
 {
   "name": "nodus-ghost-hands",
+  "version": "1.0.0",
   "private": true,
   "description": "Ghost Hands: voice control of Windows PCs through the NODUS voice assistant (skill + Electron client)",
   "license": "MIT",
@@ -10,7 +11,8 @@
     "routing:assert": "node tools/routing-report.js --assert",
     "pack": "node tools/pack.js skill dist",
     "dev-host": "node tools/dev-host.js",
-    "fake-client": "node tools/fake-client.js"
+    "fake-client": "node tools/fake-client.js",
+    "release": "node tools/release.js"
   },
   "devDependencies": {
     "adm-zip": "0.6.1",

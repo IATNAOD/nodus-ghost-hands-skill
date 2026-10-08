@@ -13,6 +13,9 @@ const { wordsOf, ordinalOf } = require("./text");
 const { answerKind, isCancel } = require("./confirm");
 
 const RECENT_MS = 120_000;
+// a question waits 20 s by default, and game sounds keep the microphone open that long:
+// while a command runs, NODUS does not listen for its wake word
+const ASK_TIMEOUT_MS = 10_000;
 const ALL_ANSWERS = new Set(["все", "всех", "оба", "обоих", "обе", "везде", "all", "both", "everywhere"]);
 
 const denied = (answer) => ({ ok: false, answer });
@@ -168,7 +171,7 @@ async function choosePc(ctx, { index, actor, pc, needOnline = true, feature, abl
 
   if (typeof ctx.askUser !== "function") return { ok: false, answer: ctx.t("common.name_the_pc", { names: candidates.map((device) => device.name) }), pool };
 
-  const answer = await ctx.askUser(ctx.t("common.which_pc", { names: candidates.map((device) => `«${device.name}»`) })).catch(() => null);
+  const answer = await ctx.askUser(ctx.t("common.which_pc", { names: candidates.map((device) => `«${device.name}»`) }), { timeoutMs: ASK_TIMEOUT_MS }).catch(() => null);
 
   if (!answer?.text) return { ok: false, answer: ctx.t("common.not_heard"), pool };
   if (isCancel(answer.text) || answerKind(answer.text) === "no") return { ok: false, answer: ctx.t("common.cancelled"), pool };
@@ -181,4 +184,4 @@ async function choosePc(ctx, { index, actor, pc, needOnline = true, feature, abl
   return { ok: true, devices: chosen, pool };
 }
 
-module.exports = { resolveActor, choosePc, pcsFromAnswer, RecentChoices, RECENT_MS };
+module.exports = { resolveActor, choosePc, pcsFromAnswer, RecentChoices, RECENT_MS, ASK_TIMEOUT_MS };

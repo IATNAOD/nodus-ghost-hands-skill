@@ -161,7 +161,7 @@ namespace GhostHelper
                 case "process.list":
                     return Processes.List(args.GetStringArray("underDirs"), args.GetStringArray("exes"));
                 case "process.close":
-                    return Processes.Close(args.GetIntArray("pids"), args.GetInt("softMs", 3000), _selfPid, _parentPid);
+                    return Processes.Close(args.GetIntArray("pids"), args.GetInt("softMs", 5000), _selfPid, _parentPid);
                 case "process.kill":
                     return Processes.Kill(args.GetIntArray("pids"), args.GetBool("tree", false), _selfPid, _parentPid);
                 case "process.start":

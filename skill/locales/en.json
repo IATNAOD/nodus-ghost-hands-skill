@@ -38,6 +38,10 @@
       "label": "Always ask which computer",
       "description": "Do not reuse the computer chosen in the last 2 minutes when several fit."
     },
+    "app_confidence": {
+      "label": "Name match to run without asking, %",
+      "description": "Below this NODUS asks: \"Launch Dota 2?\". When several names are close, it asks which one. From 60 to 100, 86 by default. The computer app shows the match of a phrase: Apps and games → Check a phrase."
+    },
     "ai_names": {
       "label": "Match names with AI",
       "description": "When an app name is not recognized, the AI picks it from the list and NODUS asks to confirm. Only app names go to the AI."
@@ -134,6 +138,7 @@
     "not_understood": "I didn't get which one. Cancelling.",
     "offer_wake": "The computer {{pc}} is off. Turn it on?",
     "kept_off": "OK, I won't turn it on.",
+    "failed": "That didn't work. Try again.",
     "one_moment": "One moment",
     "child_denied": "Only an adult can do that.",
     "guest_denied": "Computers can't be controlled in guest mode.",
@@ -188,6 +193,7 @@
       "no_game": "I don't see any running games.",
       "which": "Which one should I close: {{names, list(type: disjunction)}}?",
       "stuck": "{{name}} doesn't close. Force it?",
+      "background": "{{name}} runs in the background without a window. Force it to close?",
       "kept": "OK, leaving it.",
       "forced": "Force-closed {{name}}.",
       "done": "Closed {{name}}.",

@@ -4,6 +4,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { app, dialog, shell, powerMonitor } from "electron";
 import { MSG, normalizeKey, LIMITS } from "@skill/protocol.js";
+import { ACCEPT } from "@skill/names.js";
 import { NameIndex } from "@skill/name-index.js";
 import { classify } from "@skill/parse.js";
 import log from "./log";
@@ -20,7 +21,7 @@ import { listStartApps, startId, type StartApp } from "./catalog/startmenu";
 import { Dispatcher, type Command } from "./exec";
 import { launchApp } from "./exec/apps";
 import { PowerControl, type OverlayHost } from "./exec/power";
-import { Connection, type Welcome } from "./net/connection";
+import { Connection, type SkillSettings, type Welcome } from "./net/connection";
 import type { Updater } from "./updater";
 import type {
   AppPatch,
@@ -67,6 +68,8 @@ export class Core extends EventEmitter {
   private nameError: string | null = null;
   private log: CommandLogEntry[] = [];
   private wol: WolInfo | null = null;
+  /** what the skill told on connecting: its version and from which match it runs apps without asking */
+  private skill = { version: null as string | null, accept: ACCEPT as number };
   private machine: string | null = null;
   private volume: { level: number; muted: boolean } | null = null;
   private lastConfig = "";
@@ -234,6 +237,8 @@ export class Core extends EventEmitter {
       { skill: false },
     );
     this.nameError = null;
+    this.skill.version = typeof welcome.server?.version === "string" ? welcome.server.version : null;
+    this.applySkillSettings(welcome.settings);
     this.wol = await wolInfo(this.helper, this.connection.localAddress);
     this.sendConfig();
     this.sendState();
@@ -244,7 +249,11 @@ export class Core extends EventEmitter {
     switch (message.t) {
       case MSG.CMD: {
         const command = message as unknown as Command;
+        const started = Date.now();
         const result = await this.dispatcher.handle(command);
+
+        // no arguments: a search query is the person's words
+        log.info(`${command.action}: ${result.ok ? "ok" : result.code} in ${Date.now() - started} ms`);
 
         this.connection.send(MSG.RESULT, { id: command.id, ok: result.ok, code: result.ok ? null : result.code, data: result.data ?? {} });
         if (command.action.startsWith("volume.") && result.ok && result.data && typeof result.data.level === "number") {
@@ -265,6 +274,9 @@ export class Core extends EventEmitter {
         this.emitState();
         return;
       }
+      case MSG.SETTINGS:
+        this.applySkillSettings(message as SkillSettings);
+        return;
       case MSG.LEARN: {
         const appId = String(message.appId ?? "");
         const alias = String(message.alias ?? "").trim().slice(0, LIMITS.aliasLength);
@@ -283,6 +295,13 @@ export class Core extends EventEmitter {
       default:
         return;
     }
+  }
+
+  private applySkillSettings(settings: SkillSettings | undefined): void {
+    const accept = Number(settings?.match?.accept);
+
+    if (Number.isFinite(accept) && accept >= 0.6 && accept <= 1) this.skill.accept = accept;
+    this.emitState();
   }
 
   private addLog(command: Command, ok: boolean, code: string | null): void {
@@ -332,6 +351,7 @@ export class Core extends EventEmitter {
       update: this.updater?.state ?? { status: "disabled", version: null, percent: null, error: null },
       log: this.log,
       helper: { ok: this.helper.ok, error: this.helper.lastError },
+      skill: { ...this.skill },
     };
   }
 
@@ -611,6 +631,7 @@ export class Core extends EventEmitter {
   private checkPhrase(text: string): PhraseCheck {
     const index = new NameIndex();
 
+    index.setAccept(this.skill.accept);
     index.upsert({ deviceId: "this-pc", userId: "me", config: this.configData(), online: true });
     index.setState("this-pc", { running: this.running.forSkill(true), volume: null, muted: null, shutdownAt: null });
 

@@ -238,6 +238,7 @@ class Hub {
       name: record.name,
       owner: { name: key.userName ?? "" },
       server: { version: this.version, protoMin: P.PROTO_MIN, protoMax: P.PROTO_MAX },
+      settings: this.clientSettings(),
       created: !message.deviceId,
     });
     this.onEvent("online", { device: this.index.get(record.deviceId), lastSeenAt });
@@ -410,6 +411,18 @@ class Hub {
 
   kickUser(userId, code, reason = "") {
     for (const conn of [...this.active.values()]) if (conn.userId === String(userId)) this.drop(conn, code, reason);
+  }
+
+  /** Skill settings the PCs show: from which match NODUS runs an app without asking. */
+  clientSettings() {
+    return { match: { accept: this.index.accept } };
+  }
+
+  /** After a settings change: every connected PC gets them at once. */
+  broadcastSettings() {
+    const settings = this.clientSettings();
+
+    for (const conn of this.active.values()) if (!conn.dropping) this.send(conn, P.MSG.SETTINGS, settings);
   }
 
   send(conn, type, fields) {

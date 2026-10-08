@@ -21,6 +21,7 @@ const MSG = Object.freeze({
   CMD: "cmd",
   RESULT: "result",
   LEARN: "learn",
+  SETTINGS: "settings",
   BYE: "bye",
 });
 

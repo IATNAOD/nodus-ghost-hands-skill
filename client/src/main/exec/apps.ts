@@ -151,11 +151,21 @@ function pickTarget(deps: AppDeps, args: Record<string, unknown>): { entry?: Run
   return fail("invalid-args");
 }
 
+interface CloseResult {
+  closed: number[];
+  hidden: number[];
+  pending: number[];
+  windowless: number[];
+}
+
 /**
- * Close an app: WM_CLOSE to its windows, 3 s to exit; processes without windows
- * left in its folder go after it. A forced close kills the process tree.
+ * Close an app like its close button: WM_CLOSE to its windows. It is closed when its windows
+ * are gone - a game may save for a while after that, an app may stay in the tray. Windows still
+ * open after `softMs` (a "save changes?" question) are `pending`: the skill offers to force it.
+ * A forced close kills the process tree.
+ * @param softMs how long to wait for the windows, within the skill's reply time
  */
-export async function closeApp(deps: AppDeps, args: Record<string, unknown>): Promise<Result> {
+export async function closeApp(deps: AppDeps, args: Record<string, unknown>, softMs = 5000): Promise<Result> {
   const target = pickTarget(deps, args);
 
   if ("ok" in target) return target;
@@ -183,30 +193,27 @@ export async function closeApp(deps: AppDeps, args: Record<string, unknown>): Pr
       return ok({ name, closed: killed.killed, pending: [] });
     }
 
-    const windowed = deps.running.windowPids();
-    const withWindows = pids.filter((pid) => windowed.has(pid));
-    const background = pids.filter((pid) => !windowed.has(pid));
+    const startedAt = Date.now();
+    const result = await deps.helper.call<CloseResult>("process.close", { pids, softMs }, softMs + 4000);
 
-    if (!withWindows.length) return ok({ name, closed: [], pending: pids });
+    log.info(`close ${name}: closed ${result.closed.length}, hidden ${result.hidden.length}, pending ${result.pending.length}, windowless ${result.windowless.length}`);
 
-    const result = await deps.helper.call<{ closed: number[]; pending: number[] }>("process.close", { pids: withWindows, softMs: 3000 }, 9000);
+    // nothing had a window: it works in the background or sits in the tray
+    if (result.windowless.length === pids.length) return ok({ name, closed: [], pending: result.windowless, background: true });
+    if (!result.pending.length) return ok({ name, closed: [...result.closed, ...result.hidden], pending: [] });
 
-    if (!result.pending.length && background.length) {
-      // crash handlers and launchers of a closed game
-      deps.helper.call("process.kill", { pids: background, tree: false }).catch(() => undefined);
+    const forceAfterMs = deps.store.get().prefs.forceCloseSec * 1000;
+
+    if (forceAfterMs > 0) {
+      const timer = setTimeout(() => {
+        deps.helper.call("process.kill", { pids: result.pending, tree: true }).catch((error) => log.warn(`force close: ${(error as Error).message}`));
+      }, Math.max(0, forceAfterMs - (Date.now() - startedAt)));
+
+      timer.unref();
+      return ok({ name, closed: [...result.closed, ...result.hidden], pending: [] });
     }
 
-    const forceAfter = deps.store.get().prefs.forceCloseSec;
-
-    if (result.pending.length && forceAfter > 0) {
-      setTimeout(() => {
-        deps.helper.call("process.kill", { pids: [...result.pending, ...background], tree: true }).catch((error) => log.warn(`force close: ${(error as Error).message}`));
-      }, Math.max(0, forceAfter - 3) * 1000);
-
-      return ok({ name, closed: result.closed, pending: [] });
-    }
-
-    return ok({ name, closed: result.closed, pending: result.pending });
+    return ok({ name, closed: [...result.closed, ...result.hidden], pending: result.pending });
   } catch (error) {
     return fail(helperCode(error));
   }

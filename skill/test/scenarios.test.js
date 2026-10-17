@@ -37,7 +37,13 @@ const finished = (runId, id, fields = {}) => ({ runId, id, name: "Режим с�
 
 /* ── waiting for runs ── */
 
-test("waiters: the finished run answers, also when it came first; other PCs and timeouts", async () => {
+test("waiters: the finished run answers, also when it came first; other PCs and timeouts", async (t) => {
+  // the waiter's timer does not hold the process (unref), NODUS does; Node 22 cancels a test
+  // whose event loop has nothing else to wait for
+  const hold = setInterval(() => undefined, 1000);
+
+  t.after(() => clearInterval(hold));
+
   const waiters = new ScenarioWaiters();
   const runId = newRunId();
 

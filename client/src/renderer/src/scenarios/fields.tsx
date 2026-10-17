@@ -1,12 +1,13 @@
 // Fields of node inputs: the same ones in a node card (compact), the inspector and the steps.
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { Braces, Crosshair, FolderOpen, Keyboard, Monitor, ScanSearch, SquareDashed, X } from "lucide-react";
+import { Braces, ClipboardPaste, Crosshair, FolderOpen, ImageUp, Keyboard, Monitor, ScanSearch, SquareDashed, X } from "lucide-react";
 import type { NodeDef, PinDef } from "../../../shared/scenarios/defs";
 import { comboLabel, normalizeCombo } from "../../../shared/scenarios/keys";
 import type { ImageRef, KeyCombo, MonitorSel, Point, RegionSel, ScenarioSummary, Value } from "../../../shared/scenarios/model";
 import { pinText } from "../../../shared/scenarios/texts";
 import type { AppView, DisplayInfo } from "../../../shared/types";
 import { useTexts } from "../i18n";
+import { useToast } from "../ui";
 
 export interface FieldContext {
   lang: "ru" | "en";
@@ -281,7 +282,11 @@ export function TextField({ value, onChange, template, multiline, compact, disab
   );
 }
 
-/** Press a combination to record it; global hotkeys are off meanwhile, so existing ones can be recorded. */
+/**
+ * Press a combination to record it. The helper takes the keys before Windows does, so Win+D or
+ * Alt+Tab are recorded instead of done; the window's own key events are the fallback. Global
+ * hotkeys are off meanwhile, so existing ones can be recorded.
+ */
 export function KeyRecorder({ codes, onChange, compact, disabled }: { codes: string[]; onChange(codes: string[]): void; compact?: boolean; disabled?: boolean }) {
   const t = useTexts();
   const [recording, setRecording] = useState(false);
@@ -294,29 +299,47 @@ export function KeyRecorder({ codes, onChange, compact, disabled }: { codes: str
 
     const pressed = new Set<string>();
     const seen: string[] = [];
-    const down = (event: KeyboardEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      pressed.add(event.code);
-      if (!seen.includes(event.code)) seen.push(event.code);
-      setLive(normalizeCombo(seen));
-    };
-    const up = (event: KeyboardEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      pressed.delete(event.code);
+    let done = false;
+    const press = (code: string, isDown: boolean) => {
+      if (done) return;
+      if (isDown) {
+        pressed.add(code);
+        if (!seen.includes(code)) seen.push(code);
+        setLive(normalizeCombo(seen));
+        return;
+      }
+      pressed.delete(code);
+      // all keys let go: that was the combination
       if (pressed.size === 0 && seen.length) {
+        done = true;
         changed.current(normalizeCombo(seen));
         setRecording(false);
       }
     };
+    const down = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      press(event.code, true);
+    };
+    const up = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      press(event.code, false);
+    };
     const blur = () => setRecording(false);
+    const off = window.gh.onCapturedKey((key) => {
+      if (key.type === "stopped") setRecording(false);
+      else press(key.code, key.type === "down");
+    });
 
     window.gh.suspendHotkeys(true).catch(() => undefined);
+    window.gh.captureKeys(true).catch(() => false);
     window.addEventListener("keydown", down, true);
     window.addEventListener("keyup", up, true);
     window.addEventListener("blur", blur);
     return () => {
+      off();
+      window.gh.captureKeys(false).catch(() => false);
       window.removeEventListener("keydown", down, true);
       window.removeEventListener("keyup", up, true);
       window.removeEventListener("blur", blur);
@@ -342,7 +365,17 @@ export function KeyRecorder({ codes, onChange, compact, disabled }: { codes: str
 
 function ImageField({ value, onChange, compact, disabled }: { value: ImageRef | null; onChange(value: Value): void; compact?: boolean; disabled?: boolean }) {
   const t = useTexts();
+  const toast = useToast();
   const [src, setSrc] = useState<string | null>(null);
+  const load = async (source: "file" | "clipboard") => {
+    try {
+      const ref = await window.gh.loadTemplate(source);
+      if (ref) onChange(ref);
+    } catch (error) {
+      const code = String((error as Error)?.message ?? "").replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+      toast("error", t.sc.pictureError[code] ?? t.sc.pictureError["bad-image"]);
+    }
+  };
 
   useEffect(() => {
     setSrc(null);
@@ -352,18 +385,27 @@ function ImageField({ value, onChange, compact, disabled }: { value: ImageRef | 
   return (
     <span className={`pf pf-image ${compact ? "compact nodrag" : ""}`}>
       {src ? <img src={src} alt="" /> : <span className="pf-empty">{t.sc.noImage}</span>}
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm"
-        disabled={disabled}
-        onClick={async () => {
-          const ref = await window.gh.captureTemplate().catch(() => null);
-          if (ref) onChange(ref);
-        }}
-      >
-        <ScanSearch />
-        {!compact && (value ? t.sc.recapture : t.sc.capture)}
-      </button>
+      <span className="pf-image-actions">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          title={compact ? t.sc.capture : undefined}
+          disabled={disabled}
+          onClick={async () => {
+            const ref = await window.gh.captureTemplate().catch(() => null);
+            if (ref) onChange(ref);
+          }}
+        >
+          <ScanSearch />
+          {!compact && (value ? t.sc.recapture : t.sc.capture)}
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" title={t.sc.fromFile} disabled={disabled} onClick={() => void load("file")}>
+          <ImageUp />
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" title={t.sc.fromClipboard} disabled={disabled} onClick={() => void load("clipboard")}>
+          <ClipboardPaste />
+        </button>
+      </span>
     </span>
   );
 }

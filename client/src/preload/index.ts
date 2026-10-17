@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { IPC, type GhostApi, type InvokeMethod, type UiState } from "../shared/types";
+import { IPC, type CapturedKey, type GhostApi, type InvokeMethod, type UiState } from "../shared/types";
 import type { RunEvent } from "../shared/scenarios/model";
 
 const invoke =
@@ -61,6 +61,7 @@ const api: GhostApi = {
   importScenario: invoke("importScenario") as GhostApi["importScenario"],
   confirmImport: invoke("confirmImport") as GhostApi["confirmImport"],
   captureTemplate: invoke("captureTemplate") as GhostApi["captureTemplate"],
+  loadTemplate: invoke("loadTemplate") as GhostApi["loadTemplate"],
   pickPoint: invoke("pickPoint") as GhostApi["pickPoint"],
   pickRegion: invoke("pickRegion") as GhostApi["pickRegion"],
   listDisplays: invoke("listDisplays") as GhostApi["listDisplays"],
@@ -70,6 +71,8 @@ const api: GhostApi = {
   checkScenarioName: invoke("checkScenarioName") as GhostApi["checkScenarioName"],
   onRunEvents: (listener) => subscribe<RunEvent[]>(IPC.runEvents, listener),
   onOpenScenario: (listener) => subscribe<{ id: string; nodeId?: string }>(IPC.openScenario, listener),
+  captureKeys: invoke("captureKeys") as GhostApi["captureKeys"],
+  onCapturedKey: (listener) => subscribe<CapturedKey>(IPC.capturedKey, listener),
 };
 
 contextBridge.exposeInMainWorld("gh", api);

@@ -103,6 +103,22 @@ export const KEYS: Record<string, KeyInfo> = {
   LaunchApp2: v(0xb7, "Calculator"),
 };
 
+/**
+ * A key Windows reported (virtual key, scan code, extended flag) → its KeyboardEvent.code.
+ * The same scan code can be two keys (Pause and NumLock), and the numpad without NumLock gives
+ * other virtual keys: the exact key first, then keys known by the virtual key only, then the scan code.
+ */
+export function codeOfKey(vk: number, scan: number, ext: boolean): string | null {
+  const entries = Object.entries(KEYS);
+  const exact = entries.find(([, key]) => key.scan !== 0 && key.scan === scan && key.ext === ext && key.vk === vk);
+  if (exact) return exact[0];
+  const byVk = entries.find(([, key]) => key.scan === 0 && key.vk === vk);
+  if (byVk) return byVk[0];
+  const byScan = entries.find(([, key]) => key.scan !== 0 && key.scan === scan && key.ext === ext);
+  if (byScan) return byScan[0];
+  return entries.find(([, key]) => key.vk === vk)?.[0] ?? null;
+}
+
 const MODIFIERS = ["ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "AltLeft", "AltRight", "MetaLeft", "MetaRight"];
 const MODIFIER_ORDER = ["Control", "Alt", "Shift", "Super"];
 

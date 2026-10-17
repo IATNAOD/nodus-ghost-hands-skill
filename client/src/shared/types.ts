@@ -146,6 +146,9 @@ export interface ImportPreview {
   schedules: string[];
 }
 
+/** A key while a hotkey is recorded; "stopped" - the capture ended by itself (15 s). */
+export type CapturedKey = { type: "down" | "up"; code: string } | { type: "stopped" };
+
 /** Would NODUS understand the voice name of a scenario? */
 export interface ScenarioNameCheck {
   /** each name: what "запусти <name> на компьютере" gives */
@@ -304,6 +307,8 @@ export interface GhostApi {
   importScenario(): Promise<ImportPreview | null>;
   confirmImport(token: string): Promise<Scenario>;
   captureTemplate(): Promise<ImageRef | null>;
+  /** a sample cut from a picture the person has: a PNG/JPEG file or the clipboard; errors: clipboard-empty, bad-image, image-too-big */
+  loadTemplate(source: "file" | "clipboard"): Promise<ImageRef | null>;
   pickPoint(): Promise<Point | null>;
   pickRegion(): Promise<RegionSel | null>;
   listDisplays(): Promise<DisplayInfo[]>;
@@ -312,6 +317,12 @@ export interface GhostApi {
   checkHotkey(accelerator: string, scenarioId: string): Promise<{ ok: boolean; reason?: "invalid" | "taken" | "duplicate" | "panic" }>;
   /** while the key recorder has focus, global hotkeys are off */
   suspendHotkeys(on: boolean): Promise<void>;
+  /**
+   * Record keys before Windows sees them (Win+D, Alt+Tab): on - true when the helper took the
+   * keyboard, they come to onCapturedKey; false - the window's own key events are all there is.
+   */
+  captureKeys(on: boolean): Promise<boolean>;
+  onCapturedKey(listener: (key: CapturedKey) => void): () => void;
   checkScenarioName(id: string, names: string[]): Promise<ScenarioNameCheck>;
 }
 
@@ -321,7 +332,8 @@ export const IPC = {
   invoke: "gh:invoke",
   runEvents: "gh:run-events",
   openScenario: "gh:open-scenario",
+  capturedKey: "gh:captured-key",
 } as const;
 
 /** Methods of GhostApi called through one invoke channel: [method, ...args] */
-export type InvokeMethod = Exclude<keyof GhostApi, "onState" | "onPairLink" | "onRunEvents" | "onOpenScenario">;
+export type InvokeMethod = Exclude<keyof GhostApi, "onState" | "onPairLink" | "onRunEvents" | "onOpenScenario" | "onCapturedKey">;

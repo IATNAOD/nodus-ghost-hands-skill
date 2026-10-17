@@ -156,7 +156,7 @@ namespace GhostHelper
             switch (cmd)
             {
                 case "ping":
-                    return new Dictionary<string, object> { ["version"] = Version, ["pid"] = _selfPid, ["features"] = new List<object> { "screen", "input", "ocr" } };
+                    return new Dictionary<string, object> { ["version"] = Version, ["pid"] = _selfPid, ["features"] = new List<object> { "screen", "input", "ocr", "keys.capture" } };
 
                 case "selftest":
                     return BuildSelftest(_sta);
@@ -246,6 +246,11 @@ namespace GhostHelper
                     return Keyboard.State();
                 case "input.waitRelease":
                     return Keyboard.WaitRelease(args);
+                // recording a hotkey: the keys go to the client, not to Windows
+                case "keys.capture":
+                    return KeyCapture.Start(args, (name, data) => Out.WriteEvent(name, data));
+                case "keys.captureStop":
+                    return KeyCapture.Stop();
                 case "input.mouse":
                     return Mouse.Act(args);
                 case "input.scroll":

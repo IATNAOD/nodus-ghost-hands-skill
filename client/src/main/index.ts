@@ -16,7 +16,7 @@ const METHODS = new Set<InvokeMethod>([
   "getState", "pair", "unpair", "reconnect", "setDevice", "setServer", "setApp", "addApp", "removeApp", "listStartApps",
   "addStartApps", "pickExecutable", "rescan", "testLaunch", "setFeatures", "setPrefs", "setUi", "checkPhrase",
   "checkUpdates", "installUpdate", "openLogs", "openExternal", "cancelCountdown", "takePairLink",
-  "getScenario", "createScenario", "saveScenario", "deleteScenario", "runScenario", "stopScenario", "getRuns", "getRunLog", "setRunEvents", "getVariables", "setVariable", "deleteVariable", "getAsset", "exportScenario", "importScenario", "confirmImport", "captureTemplate", "pickPoint", "pickRegion", "listDisplays", "getOcrLanguages", "checkHotkey", "suspendHotkeys", "checkScenarioName",
+  "getScenario", "createScenario", "saveScenario", "deleteScenario", "runScenario", "stopScenario", "getRuns", "getRunLog", "setRunEvents", "getVariables", "setVariable", "deleteVariable", "getAsset", "exportScenario", "importScenario", "confirmImport", "captureTemplate", "loadTemplate", "pickPoint", "pickRegion", "listDisplays", "getOcrLanguages", "checkHotkey", "suspendHotkeys", "captureKeys", "checkScenarioName",
 ]);
 
 /** ghosthands://pair?key=GH-...&host=project-nod.local&port=47300 from the personal page */
@@ -164,6 +164,9 @@ if (!app.requestSingleInstanceLock()) {
     // scenarios: live run events for the editor, "open at the failing step", windows hidden from capture
     core.on("run-events", (events) => {
       if (window && !window.isDestroyed()) window.webContents.send(IPC.runEvents, events);
+    });
+    core.on("captured-key", (key) => {
+      if (window && !window.isDestroyed()) window.webContents.send(IPC.capturedKey, key);
     });
     core.on("open-scenario", (target) => {
       showWindow();

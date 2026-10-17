@@ -31,7 +31,7 @@ export const en: typeof ru = {
       errorCode: { label: "Error code", description: "A short code such as not-found or timeout. Set when the flow went through the Error output." },
       errorMessage: { label: "Error text", description: "Error details for the log." },
       app: { label: "App", description: "An app or a game from the Ghost Hands list of this computer." },
-      image: { label: "Sample", description: "A picture taken from the screen: a button, an icon, a piece of a window. It is searched for on the screen." },
+      image: { label: "Sample", description: "A button, an icon, a piece of a window: take it from the screen or cut it out of a picture in a file or the clipboard. It is searched for on the screen." },
       monitors: { label: "Monitors", description: "Where to look: all monitors, the primary one, the one with the active window, the one under the cursor or the chosen ones." },
       region: { label: "Area", description: "Look only in this part of the screen. Empty - the whole monitor. A smaller area is faster and more reliable." },
       threshold: { label: "Precision", description: "How close the match must be: 0.85 is usual, higher is stricter, lower finds even slightly different things." },

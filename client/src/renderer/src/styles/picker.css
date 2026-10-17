@@ -21,12 +21,33 @@ body {
   cursor: crosshair;
 }
 
+/* placed by the page: the picture keeps its proportions inside the window */
 .picker > img {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
   pointer-events: none;
+}
+
+/* a picture from a file or the clipboard: a window, not a whole monitor */
+.picker.windowed {
+  box-sizing: border-box;
+  border: 1px solid rgba(173, 103, 255, 0.6);
+  background: #0c0814;
+}
+
+.picker .whole {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--brand-gradient);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
 /* everything but the selection is dimmed */
@@ -91,6 +112,29 @@ body {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   white-space: nowrap;
+}
+
+/* a picture's window is small: the tip wraps inside it */
+.picker.windowed .tip {
+  top: 10px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  padding: 6px 12px;
+  font-size: 13px;
+  white-space: normal;
+  text-align: center;
+}
+
+.picker.windowed .tip span {
+  white-space: nowrap;
+}
+
+.picker.windowed .tip span:first-child {
+  white-space: normal;
 }
 
 .picker .tip kbd {

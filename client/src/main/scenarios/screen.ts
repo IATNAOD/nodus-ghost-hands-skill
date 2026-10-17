@@ -1,9 +1,11 @@
 // The screen for scenarios: monitors (Electron displays matched to the helper's physical
 // rectangles), frames in temp files, "Find image" through the vision process, text through the
-// Windows OCR, and the pickers that take a sample, a point or an area from the screen.
+// Windows OCR, and the pickers that take a sample, a point or an area from the screen or from a
+// picture the person already has (a file, the clipboard).
 import { promises as fs } from "fs";
 import path from "path";
-import { app, BrowserWindow, ipcMain, nativeImage, screen, type Rectangle, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, screen, type NativeImage, type Rectangle, type WebContents } from "electron";
+import { t } from "../i18n";
 import { load } from "../windows";
 import type { Helper } from "../system/helper";
 import { centerOf, type ImageRef, type MonitorSel, type Point, type Region, type RegionSel } from "../../shared/scenarios/model";
@@ -38,6 +40,17 @@ interface CapturedFrame {
 
 type PickMode = "image" | "point" | "region";
 
+/** What one picker window shows: a frozen monitor, or a picture from a file or the clipboard. */
+interface PickerFrame {
+  mode: PickMode;
+  /** JPEG, base64 */
+  image: string;
+  w: number;
+  h: number;
+  /** a picture, not the screen: Enter takes all of it */
+  whole?: boolean;
+}
+
 interface PickResult {
   index: number;
   x: number;
@@ -47,6 +60,9 @@ interface PickResult {
 }
 
 const SAMPLE_MAX = 1024;
+/** a picture to cut a sample from: a whole 8K screenshot, not more */
+const PICTURE_MAX = 8192;
+const PICTURE_FILE_MAX = 40_000_000;
 
 export class ScenarioScreen {
   private monitorsCache: Monitor[] | null = null;
@@ -55,7 +71,7 @@ export class ScenarioScreen {
   private captureCount = 0;
   private hints = new Map<string, Hit>();
   private ocrLangs: { tag: string; name: string }[] | null = null;
-  private picker: { windows: BrowserWindow[]; resolve: (result: PickResult | null) => void; frames: { mode: PickMode; image: string; w: number; h: number }[] } | null = null;
+  private picker: { windows: BrowserWindow[]; resolve: (result: PickResult | null) => void; frames: PickerFrame[] } | null = null;
   private onDisplays = () => {
     this.monitorsCache = null;
   };
@@ -243,6 +259,66 @@ export class ScenarioScreen {
     return { asset: stored.asset, w: stored.w, h: stored.h, scale: monitor.scale };
   }
 
+  /**
+   * A sample cut from a picture the person has: a PNG or JPEG file, or the clipboard (Win+Shift+S).
+   * The picture opens in a window; a frame around the element, or Enter for all of it.
+   */
+  async loadTemplate(source: "file" | "clipboard"): Promise<ImageRef | null> {
+    if (this.picker) return null;
+
+    const picture = source === "clipboard" ? await this.clipboardPicture() : await this.filePicture();
+    if (!picture) return null;
+
+    const { width, height } = picture.getSize();
+    if (width < 4 || height < 4) throw new Error("bad-image");
+    if (width > PICTURE_MAX || height > PICTURE_MAX) throw new Error("image-too-big");
+
+    // the picture is shown on the display the person works on, at its size there when it fits
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const picked = await this.openPickers([{ frame: { mode: "image", image: picture.toJPEG(92).toString("base64"), w: width, h: height, whole: width <= SAMPLE_MAX && height <= SAMPLE_MAX }, bounds: this.pictureBounds(display, width, height), fullscreen: false }]);
+    if (!picked || !picked.w || !picked.h) return null;
+
+    const w = Math.min(SAMPLE_MAX, Math.max(4, Math.round(picked.w)));
+    const h = Math.min(SAMPLE_MAX, Math.max(4, Math.round(picked.h)));
+    const x = Math.max(0, Math.min(width - w, Math.round(picked.x)));
+    const y = Math.max(0, Math.min(height - h, Math.round(picked.y)));
+    const stored = await this.service.store.putAsset(picture.crop({ x, y, width: w, height: h }).toPNG());
+
+    // a screenshot of this PC: its pixels are of the display where the person works
+    return { asset: stored.asset, w: stored.w, h: stored.h, scale: display.scaleFactor };
+  }
+
+  private async filePicture(): Promise<NativeImage | null> {
+    const result = await dialog.showOpenDialog({ title: t("templateFromFile"), properties: ["openFile"], filters: [{ name: t("imageFiles"), extensions: ["png", "jpg", "jpeg"] }] });
+    const file = result.canceled ? null : result.filePaths[0];
+    if (!file) return null;
+
+    if ((await fs.stat(file)).size > PICTURE_FILE_MAX) throw new Error("image-too-big");
+    const picture = nativeImage.createFromBuffer(await fs.readFile(file));
+    if (picture.isEmpty()) throw new Error("bad-image");
+    return picture;
+  }
+
+  private async clipboardPicture(): Promise<NativeImage> {
+    for (const item of await clipboard.read()) {
+      if (!item.types.includes("image/png")) continue;
+      const blob = await item.getType("image/png");
+      if (!(blob instanceof Blob) || blob.size > PICTURE_FILE_MAX) continue;
+      const picture = nativeImage.createFromBuffer(Buffer.from(await blob.arrayBuffer()));
+      if (!picture.isEmpty()) return picture;
+    }
+    throw new Error("clipboard-empty");
+  }
+
+  /** A window for a picture: its size on the display when it fits in 90% of the work area. */
+  private pictureBounds(display: Electron.Display, width: number, height: number): Rectangle {
+    const area = display.workArea;
+    const k = Math.min(1 / display.scaleFactor, (area.width * 0.9) / width, (area.height * 0.9) / height);
+    const w = Math.max(560, Math.round(width * k));
+    const h = Math.max(360, Math.round(height * k));
+    return { x: Math.round(area.x + (area.width - w) / 2), y: Math.round(area.y + (area.height - h) / 2), width: w, height: h };
+  }
+
   async pickPoint(): Promise<Point | null> {
     const picked = await this.pick("point");
     return picked ? { x: picked.source.frame.x + Math.round(picked.x), y: picked.source.frame.y + Math.round(picked.y) } : null;
@@ -268,27 +344,13 @@ export class ScenarioScreen {
         frames.map(async (frame) => ({ frame, monitor: all.find((m) => m.device === frame.monitor) ?? all[0], bgra: await fs.readFile(frame.file) })),
       );
 
-      const result = await new Promise<PickResult | null>((resolve) => {
-        const finish = (value: PickResult | null) => {
-          if (!this.picker) return;
-          const windows = this.picker.windows;
-          this.picker = null;
-          for (const window of windows) if (!window.isDestroyed()) window.destroy();
-          resolve(value);
-        };
-
-        this.picker = {
-          windows: [],
-          resolve: finish,
-          frames: sources.map(({ frame, bgra }) => ({
-            mode,
-            image: nativeImage.createFromBitmap(bgra, { width: frame.w, height: frame.h }).toJPEG(85).toString("base64"),
-            w: frame.w,
-            h: frame.h,
-          })),
-        };
-        this.picker.windows = sources.map(({ frame }) => this.pickerWindow(frame, finish));
-      });
+      const result = await this.openPickers(
+        sources.map(({ frame, bgra }) => ({
+          frame: { mode, image: nativeImage.createFromBitmap(bgra, { width: frame.w, height: frame.h }).toJPEG(85).toString("base64"), w: frame.w, h: frame.h },
+          bounds: screen.screenToDipRect(null, { x: frame.x, y: frame.y, width: frame.w, height: frame.h }),
+          fullscreen: true,
+        })),
+      );
 
       if (!result) return null;
       const source = sources[result.index];
@@ -298,12 +360,29 @@ export class ScenarioScreen {
     }
   }
 
-  private pickerWindow(frame: CapturedFrame, finish: (value: PickResult | null) => void): BrowserWindow {
-    const bounds = screen.screenToDipRect(null, { x: frame.x, y: frame.y, width: frame.w, height: frame.h });
+  /** A window per frame; the first answer (a pick, Esc, a closed window) closes them all. */
+  private openPickers(items: { frame: PickerFrame; bounds: Rectangle; fullscreen: boolean }[]): Promise<PickResult | null> {
+    return new Promise<PickResult | null>((resolve) => {
+      // a late "closed" of an earlier picker's window must not end this one
+      const session: NonNullable<ScenarioScreen["picker"]> = { windows: [], resolve: () => undefined, frames: items.map((item) => item.frame) };
+      const finish = (value: PickResult | null) => {
+        if (this.picker !== session) return;
+        this.picker = null;
+        for (const window of session.windows) if (!window.isDestroyed()) window.destroy();
+        resolve(value);
+      };
+
+      session.resolve = finish;
+      this.picker = session;
+      session.windows = items.map((item) => this.pickerWindow(item.bounds, item.fullscreen, finish));
+    });
+  }
+
+  private pickerWindow(bounds: Rectangle, fullscreen: boolean, finish: (value: PickResult | null) => void): BrowserWindow {
     const window = new BrowserWindow({
       ...bounds,
       frame: false,
-      resizable: true,
+      resizable: fullscreen,
       movable: false,
       minimizable: false,
       maximizable: false,
@@ -331,7 +410,7 @@ export class ScenarioScreen {
       window.setBounds(bounds);
       window.show();
       window.setBounds(bounds);
-      window.setKiosk(true);
+      if (fullscreen) window.setKiosk(true);
       window.focus();
     });
     load(window, "picker", {});

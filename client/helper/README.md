@@ -160,6 +160,8 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `input.release` | `{keys?:[...], buttons?:[...]}` | `{sent}` — key-ups and button-ups for what a stopped scenario held |
 | `input.state` | — | `{modifiers:[...], buttons:[...]}` held now |
 | `input.waitRelease` | `{timeoutMs}` | `{released}` — waits until the person lets go of the modifiers (a hotkey-started run) |
+| `keys.capture` | `{timeoutMs}` (1000–60000, default 15000) | `{capturing}`; then `{"event":"keys","data":{type: down\|up, vk, scan, ext}}` per key and `{type: "stopped", reason: stopped\|timeout}` at the end. A low-level keyboard hook takes the keys before Windows (Win+D, Alt+Tab, Win alone) while the client records a hotkey. Injected keys pass through; a key-up whose key-down came before the capture passes through. Win+L and Ctrl+Alt+Del cannot be taken |
+| `keys.captureStop` | — | `{stopped}` — ends the capture (also the time limit and the helper's exit) |
 | `ocr.languages` | — | `{languages:[{tag, name}], profile:[tag], maxDimension}` |
 | `ocr.read` | `{monitors:[id]}` or `{rect}` or `{image: path}`, `lang`, `upscale?` | `{lang, lines:[{text, rect, words:[{text, rect}]}], ms}` — large frames are read in overlapping tiles (`maxDimension`), small text is upscaled ×2. No language pack → `ocr-language`; no WinRT → `unsupported` |
 
@@ -203,6 +205,7 @@ Every `input.*` checks before sending: the input desktop is the user's (not UAC 
 | `Mouse.cs` | `input.mouse`, `input.scroll` |
 | `InputGuard.cs` | checks before any input: input desktop, elevation, the guarded window |
 | `Ocr.cs` | `ocr.languages`, `ocr.read` (`Windows.Media.Ocr`) |
+| `KeyCapture.cs` | `keys.capture`: the keyboard hook while a hotkey is recorded |
 | `Media.cs` | `media.control` (SMTC over WinRT; `Microsoft.Windows.SDK.Contracts` at build time only) |
 | `Guard.cs` | `guard` mode: the parental-control watchdog |
 | `Shell.cs` | STA executor + Shell.Application (startapps, desktop.show) |

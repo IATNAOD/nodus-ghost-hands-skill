@@ -392,6 +392,13 @@ const ru = {
     chooseScenario: "Выберите сценарий",
     capture: "Снять с экрана",
     recapture: "Снять заново",
+    fromFile: "Из файла: вырезать образец из картинки PNG или JPEG",
+    fromClipboard: "Из буфера обмена: вырезать образец из скопированного снимка (Win+Shift+S)",
+    pictureError: {
+      "clipboard-empty": "В буфере обмена нет картинки. Сделайте снимок (Win+Shift+S) и нажмите снова.",
+      "bad-image": "Не получилось открыть картинку: нужен PNG или JPEG.",
+      "image-too-big": "Картинка слишком большая: до 8192 точек по стороне и 40 МБ.",
+    } as Record<string, string>,
     pickPoint: "Указать на экране",
     pickRegion: "Выделить на экране",
     clear: "Очистить",
@@ -475,6 +482,7 @@ const ru = {
       point: "Кликните в нужную точку",
       region: "Выделите область, в которой искать",
       cancel: "отмена",
+      whole: "Всё изображение",
     },
   },
 };
@@ -863,6 +871,13 @@ const en: Texts = {
     chooseScenario: "Choose a scenario",
     capture: "Take from the screen",
     recapture: "Take again",
+    fromFile: "From a file: cut the sample out of a PNG or JPEG picture",
+    fromClipboard: "From the clipboard: cut the sample out of a copied screenshot (Win+Shift+S)",
+    pictureError: {
+      "clipboard-empty": "There is no picture in the clipboard. Take a screenshot (Win+Shift+S) and press again.",
+      "bad-image": "Couldn't open the picture: a PNG or JPEG is needed.",
+      "image-too-big": "The picture is too big: up to 8192 pixels a side and 40 MB.",
+    } as Record<string, string>,
     pickPoint: "Point on the screen",
     pickRegion: "Select on the screen",
     clear: "Clear",
@@ -944,6 +959,7 @@ const en: Texts = {
       point: "Click the point",
       region: "Select the area to search in",
       cancel: "cancel",
+      whole: "The whole picture",
     },
   },
 };

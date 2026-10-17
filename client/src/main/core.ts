@@ -32,6 +32,7 @@ import { checkScenarioNames } from "./scenarios/names";
 import { newId, VAR_NAME_RE, type Scenario } from "../shared/scenarios/model";
 import { sanitizeValue } from "../shared/scenarios/validate";
 import { nodeText } from "../shared/scenarios/texts";
+import { codeOfKey } from "../shared/scenarios/keys";
 import { PowerControl, type OverlayHost } from "./exec/power";
 import { Connection, type SkillSettings, type Welcome } from "./net/connection";
 import type { Updater } from "./updater";
@@ -72,7 +73,7 @@ const LOCKED_METHODS = new Set([
   "setFeatures", "setPrefs", "setUi", "unpair",
   // scenarios run under parental control, but nobody changes them on the PC
   "createScenario", "saveScenario", "deleteScenario", "importScenario", "confirmImport", "setVariable", "deleteVariable",
-  "captureTemplate", "pickRegion", "pickPoint",
+  "captureTemplate", "loadTemplate", "pickRegion", "pickPoint",
 ]);
 // under parental control the child still names apps for the voice: setApp with only these
 const OPEN_APP_FIELDS = new Set(["aliases", "spoken"]);
@@ -246,6 +247,13 @@ export class Core extends EventEmitter {
       this.emitState();
     });
     this.helper.on("status", () => this.emitState());
+    // keys of a hotkey being recorded, taken by the helper before Windows
+    this.helper.on("keys", (data: { type?: string; vk?: number; scan?: number; ext?: boolean }) => {
+      if (data?.type === "stopped") return this.emit("captured-key", { type: "stopped" });
+      const code = codeOfKey(Number(data?.vk), Number(data?.scan), data?.ext === true);
+      if (code && (data.type === "down" || data.type === "up")) this.emit("captured-key", { type: data.type, code });
+      return undefined;
+    });
     this.connection.on("status", () => this.emitState());
     this.connection.on("welcome", (welcome: Welcome, address: string) => this.onWelcome(welcome, address));
     this.connection.on("message", (message: Record<string, unknown>) => {
@@ -362,6 +370,24 @@ export class Core extends EventEmitter {
   /** Runs started and finished: the NODUS block waits for them, NODUS scenarios react. */
   private scenarioEvent(event: ScenarioWireEvent): void {
     if (this.connection.isOnline() && this.serverCaps.has("scenarios")) this.connection.send(MSG.SCENARIO, { ...event });
+  }
+
+  /**
+   * Recording a hotkey: the helper's keyboard hook takes the keys before Windows (Win+D would
+   * show the desktop and take the focus away). Without the helper the window's events are used.
+   */
+  private async captureKeys(on: boolean): Promise<boolean> {
+    if (!on) {
+      await this.helper.call("keys.captureStop", {}, 3000).catch(() => undefined);
+      return false;
+    }
+    try {
+      await this.helper.call("keys.capture", { timeoutMs: 15000 }, 5000);
+      return true;
+    } catch (error) {
+      log.warn(`keys.capture: ${(error as Error).message}`);
+      return false;
+    }
   }
 
   /** Voice names of a scenario as NODUS would hear them, with the apps and scenarios of this PC. */
@@ -517,7 +543,7 @@ export class Core extends EventEmitter {
   /* ── API for the window ── */
 
   // deep links live in index.ts: takePairLink is answered there
-  private api: Omit<GhostApi, "onState" | "onPairLink" | "takePairLink" | "onRunEvents" | "onOpenScenario"> = {
+  private api: Omit<GhostApi, "onState" | "onPairLink" | "takePairLink" | "onRunEvents" | "onOpenScenario" | "onCapturedKey"> = {
     getState: async () => this.uiState(),
 
     pair: (request) => this.pair(request),
@@ -744,12 +770,14 @@ export class Core extends EventEmitter {
       return this.scenarios.adopt(scenario);
     },
     captureTemplate: async () => this.scenarioScreen.captureTemplate(),
+    loadTemplate: async (source) => this.scenarioScreen.loadTemplate(source === "clipboard" ? "clipboard" : "file"),
     pickPoint: async () => this.scenarioScreen.pickPoint(),
     pickRegion: async () => this.scenarioScreen.pickRegion(),
     listDisplays: async () => this.scenarioScreen.displays(),
     getOcrLanguages: async () => this.scenarioScreen.ocrLanguages(),
     checkHotkey: async (accelerator, scenarioId) => this.scenarioTriggers.check(String(accelerator), String(scenarioId)),
     suspendHotkeys: async (on) => this.scenarioTriggers.suspend(Boolean(on)),
+    captureKeys: async (on) => this.captureKeys(Boolean(on)),
     checkScenarioName: async (id, names) => this.checkScenarioName(String(id), Array.isArray(names) ? names.map(String) : []),
   };
 

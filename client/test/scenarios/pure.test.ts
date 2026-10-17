@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { afterAll, describe, expect, it } from "vitest";
-import { comboKeys, comboLabel, fromAccelerator, toAccelerator } from "../../src/shared/scenarios/keys";
+import { codeOfKey, comboKeys, comboLabel, fromAccelerator, toAccelerator } from "../../src/shared/scenarios/keys";
 import { areaRect, selectMonitors, type Monitor } from "../../src/shared/scenarios/monitors";
 import { due, nextFire, occurrences } from "../../src/shared/scenarios/schedule";
 import { findText, fold, type OcrLine } from "../../src/shared/scenarios/textmatch";
@@ -86,6 +86,25 @@ describe("schedule", () => {
 });
 
 describe("keys", () => {
+  it("keys taken from Windows while recording become codes, also the ambiguous ones", () => {
+    // Win+D
+    expect(codeOfKey(0x5b, 0x5b, true)).toBe("MetaLeft");
+    expect(codeOfKey(0x44, 0x20, false)).toBe("KeyD");
+    expect(codeOfKey(0xa3, 0x1d, true)).toBe("ControlRight");
+    expect(codeOfKey(0xa0, 0x2a, false)).toBe("ShiftLeft");
+    // one scan code, two keys
+    expect(codeOfKey(0x13, 0x45, false)).toBe("Pause");
+    expect(codeOfKey(0x90, 0x45, true)).toBe("NumLock");
+    expect(codeOfKey(0x0d, 0x1c, false)).toBe("Enter");
+    expect(codeOfKey(0x0d, 0x1c, true)).toBe("NumpadEnter");
+    // the numpad without NumLock gives Home, the real Home is extended
+    expect(codeOfKey(0x24, 0x47, false)).toBe("Numpad7");
+    expect(codeOfKey(0x24, 0x47, true)).toBe("Home");
+    expect(codeOfKey(0x2c, 0x37, true)).toBe("PrintScreen");
+    expect(codeOfKey(0xaf, 0x30, true)).toBe("AudioVolumeUp");
+    expect(codeOfKey(0x07, 0x00, false)).toBeNull();
+  });
+
   it("modifiers first, scan codes, labels and accelerators", () => {
     expect(comboLabel(["KeyK", "ShiftLeft", "ControlLeft"])).toBe("Ctrl+Shift+K");
     expect(comboKeys(["ControlLeft", "ArrowLeft"])).toEqual([

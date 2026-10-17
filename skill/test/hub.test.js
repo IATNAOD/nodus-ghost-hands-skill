@@ -395,6 +395,41 @@ test("parental: rules only for a client that knows them; alerts and usage become
   old.ws.close();
 });
 
+test("scenarios: runs and spoken texts of a PC become events; junk and floods are dropped", async (t) => {
+  const s = await stack();
+
+  t.after(() => shutdown(s));
+
+  const pc = client(s.url);
+
+  await pc.opened;
+  hello(pc, s.keys[U1], null, { caps: ["scenarios"] });
+
+  const welcome = await pc.next(P.MSG.WELCOME);
+
+  assert.ok(welcome.server.caps.includes("scenarios"));
+  assert.equal(s.hub.supports(welcome.deviceId, "scenarios"), true);
+
+  pc.send(P.MSG.SCENARIO, { runId: "run-0001", id: "scnstream001", name: "Режим стрима", status: "finished", result: "success", output: "ok", trigger: "voice", ms: 1200 });
+  pc.send(P.MSG.SCENARIO, { runId: "bad id!", id: "scnstream001", status: "finished" });
+  pc.send(P.MSG.SCENARIO, { runId: "run-0002", id: "scnstream001", status: "paused" });
+  for (let i = 0; i < 7; i++) pc.send(P.MSG.SAY, { text: `текст ${i}`, runId: "run-0001" });
+  pc.send(P.MSG.SAY, { text: "" });
+  await settle(150);
+
+  const runs = s.events.filter((event) => event.type === "scenario");
+
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].device.deviceId, welcome.deviceId);
+  assert.deepEqual({ ...runs[0].event }, { runId: "run-0001", id: "scnstream001", name: "Режим стрима", status: "finished", result: "success", output: "ok", error: "", trigger: "voice", ms: 1200 });
+  // five a minute: a looping scenario does not talk NODUS to death
+  assert.deepEqual(
+    s.events.filter((event) => event.type === "say").map((event) => event.text),
+    ["текст 0", "текст 1", "текст 2", "текст 3", "текст 4"],
+  );
+  pc.ws.close();
+});
+
 test("dispose closes the PCs with going-away", async () => {
   const s = await stack();
   const pc = client(s.url);

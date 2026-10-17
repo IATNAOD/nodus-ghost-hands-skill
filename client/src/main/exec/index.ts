@@ -35,18 +35,27 @@ const num = (value: unknown, min: number, max: number): number | null => {
   return Number.isFinite(number) && value !== null && value !== "" ? Math.min(max, Math.max(min, Math.round(number))) : null;
 };
 
+/** Scenarios started and stopped by the skill (voice, NODUS blocks). */
+export interface ScenarioPort {
+  run(args: Record<string, unknown>): Result;
+  stop(args: Record<string, unknown>): Result;
+}
+
 /**
  * Runs commands from the skill. The server names only what this PC told it:
  * every command is checked again - the feature is on, control is not paused,
  * the app is enabled here. No paths, arguments or URLs come from the network.
  */
 export class Dispatcher {
+  scenarios: ScenarioPort | null = null;
+
   constructor(
     private deps: AppDeps,
     private power: PowerControl,
     private parental?: { blocksLaunch(app: { id: string; kind: string }): boolean },
   ) {}
 
+  /** A command from the skill: the remote gates (the feature is on, control is not paused), then perform. */
   async handle(command: Command): Promise<Result> {
     const args = command.args && typeof command.args === "object" ? command.args : {};
     const settings = this.deps.store.get();
@@ -55,10 +64,23 @@ export class Dispatcher {
     if (!isFeatureEnabled(settings.features, command.action)) return fail("feature-disabled");
     if (settings.prefs.paused) return fail("paused");
 
+    if (command.action === "scenario.run") return this.scenarios ? this.scenarios.run(args) : fail("unknown-action");
+    if (command.action === "scenario.stop") return this.scenarios ? this.scenarios.stop(args) : fail("unknown-action");
+
+    return this.perform(command.action, args, Number(command.timeoutMs) || 8000);
+  }
+
+  /**
+   * An action on this PC: from the skill after its gates, or from a scenario step (local:
+   * no feature flags, no pause - the person built the scenario here). Parental limits apply.
+   */
+  async perform(action: string, args: Record<string, unknown>, timeoutMs = 8000): Promise<Result> {
+    if (!(action in ACTIONS) || action.startsWith("scenario.")) return fail("unknown-action");
+
     try {
-      return await this.run(command.action, args, Number(command.timeoutMs) || 8000);
+      return await this.run(action, args, timeoutMs);
     } catch (error) {
-      log.error(`${command.action}: ${(error as Error).message}`);
+      log.error(`${action}: ${(error as Error).message}`);
       return fail(error instanceof HelperError ? (error.code === "helper-timeout" ? "helper-unavailable" : error.code) : "internal");
     }
   }

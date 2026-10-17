@@ -24,6 +24,8 @@ const MSG = Object.freeze({
   SETTINGS: "settings",
   PARENTAL: "parental",
   ALERT: "alert",
+  SCENARIO: "scenario",
+  SAY: "say",
   BYE: "bye",
 });
 
@@ -39,7 +41,7 @@ const CLOSE = Object.freeze({
   SERVER_ERROR: 4011,
 });
 
-const FEATURES = Object.freeze(["launch", "close", "volume", "media", "power", "lock", "display", "search", "wake", "toast"]);
+const FEATURES = Object.freeze(["launch", "close", "volume", "media", "power", "lock", "display", "search", "wake", "toast", "scenarios"]);
 
 /** action → feature that must be enabled on the PC */
 const ACTIONS = Object.freeze({
@@ -60,6 +62,8 @@ const ACTIONS = Object.freeze({
   "display.off": "display",
   "web.search": "search",
   "toast.show": "toast",
+  "scenario.run": "scenarios",
+  "scenario.stop": "scenarios",
 });
 
 const RESULT_CODES = Object.freeze([
@@ -81,6 +85,13 @@ const RESULT_CODES = Object.freeze([
   "protected",
   "no-session",
   "parental-limit",
+  "scenario-not-found",
+  "scenario-busy",
+  "scenario-invalid",
+  "scenario-recursion",
+  "input-blocked",
+  "capture-blocked",
+  "focus-lost",
   "internal",
   // produced by the server, never by the client
   "timeout",
@@ -95,7 +106,7 @@ const MEDIA_OPS = Object.freeze(["play", "pause", "toggle", "next", "prev"]);
  * What a peer can do beyond protocol 1.0 (hello.device.caps, welcome.server.caps):
  * newer actions and messages are used only with a peer that names them.
  */
-const CAPS = Object.freeze(["window.close", "media.control", "parental"]);
+const CAPS = Object.freeze(["window.close", "media.control", "parental", "scenarios"]);
 const SEARCH_ENGINES = Object.freeze(["google", "yandex", "bing", "duckduckgo", "youtube"]);
 const APP_KINDS = Object.freeze(["game", "app", "site"]);
 const APP_SOURCES = Object.freeze(["steam", "epic", "gog", "start", "custom", "url", "virtual"]);
@@ -114,6 +125,14 @@ const LIMITS = Object.freeze({
   searchQuery: 300,
   toastTitle: 80,
   toastText: 300,
+  scenarios: 200,
+  scenarioName: 80,
+  scenarioAliases: 8,
+  runningScenarios: 20,
+  scenarioText: 300,
+  scenarioInput: 2000,
+  scenarioOutput: 1000,
+  sayText: 300,
   clientPayload: 1024 * 1024,
   serverPayload: 256 * 1024,
 });
@@ -130,6 +149,10 @@ const DEFAULT_PREFS = Object.freeze({
 });
 
 const APP_ID_RE = /^(steam|epic|gog|start|custom|url|virtual):[A-Za-z0-9._~%:+-]{1,110}$/;
+/** scenarios of a PC and their runs */
+const SCENARIO_ID_RE = /^[a-z0-9]{12}$/;
+const RUN_ID_RE = /^[A-Za-z0-9_-]{6,40}$/;
+const RUN_TRIGGERS = Object.freeze(["manual", "tray", "hotkey", "schedule", "voice", "nodus", "scenario", "debug"]);
 const MAC_RE = /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/;
 const IPV4_RE = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
 
@@ -183,6 +206,24 @@ const sanitizeApp = (raw) => {
   };
 };
 
+/** A scenario of the PC as the skill knows it: a name for the voice, no steps. */
+const sanitizeScenarioRef = (raw) => {
+  if (!raw || typeof raw !== "object") return null;
+
+  const id = str(raw.id, 12);
+  const name = str(raw.name, LIMITS.scenarioName);
+
+  if (!SCENARIO_ID_RE.test(id) || !name) return null;
+
+  return {
+    id,
+    name,
+    aliases: strings(raw.aliases, LIMITS.scenarioAliases, LIMITS.aliasLength),
+    spoken: str(raw.spoken, LIMITS.aliasLength),
+    voice: bool(raw.voice, true),
+  };
+};
+
 const sanitizeWol = (raw) => {
   if (!raw || typeof raw !== "object") return null;
 
@@ -217,6 +258,18 @@ const sanitizeConfig = (raw) => {
     if (apps.length >= LIMITS.apps) break;
   }
 
+  const scenarioIds = new Set();
+  const scenarios = [];
+
+  for (const item of Array.isArray(raw.scenarios) ? raw.scenarios : []) {
+    const scenario = sanitizeScenarioRef(item);
+
+    if (!scenario || scenarioIds.has(scenario.id)) continue;
+    scenarioIds.add(scenario.id);
+    scenarios.push(scenario);
+    if (scenarios.length >= LIMITS.scenarios) break;
+  }
+
   const rawFeatures = raw.features && typeof raw.features === "object" ? raw.features : {};
   const rawPrefs = raw.prefs && typeof raw.prefs === "object" ? raw.prefs : {};
   const rawClient = raw.client && typeof raw.client === "object" ? raw.client : {};
@@ -228,6 +281,7 @@ const sanitizeConfig = (raw) => {
       aliases: strings(raw.aliases, LIMITS.deviceAliases, LIMITS.deviceName),
       shared: bool(raw.shared, false),
       apps,
+      scenarios,
       features: Object.fromEntries(FEATURES.map((feature) => [feature, bool(rawFeatures[feature], DEFAULT_FEATURES[feature])])),
       prefs: {
         confirmPower: bool(rawPrefs.confirmPower, DEFAULT_PREFS.confirmPower),
@@ -265,6 +319,16 @@ const sanitizeState = (raw) => {
     if (running.length >= LIMITS.running) break;
   }
 
+  const scenarios = [];
+
+  for (const item of Array.isArray(data.scenarios) ? data.scenarios : []) {
+    const id = str(item?.id, 12);
+    const runId = str(item?.runId, 40);
+
+    if (SCENARIO_ID_RE.test(id) && RUN_ID_RE.test(runId)) scenarios.push({ id, runId });
+    if (scenarios.length >= LIMITS.runningScenarios) break;
+  }
+
   const shutdownAt = Number(data.shutdownAt);
 
   return {
@@ -273,7 +337,40 @@ const sanitizeState = (raw) => {
     muted: typeof data.muted === "boolean" ? data.muted : null,
     shutdownAt: Number.isFinite(shutdownAt) && shutdownAt > 0 ? shutdownAt : null,
     parental: sanitizeParentalUsage(data.parental),
+    scenarios,
   };
+};
+
+/* ── scenarios of the PC ── */
+
+/** K → S `scenario`: a run started or finished (for waiting blocks and the NODUS event). */
+const sanitizeScenarioEvent = (raw) => {
+  if (!raw || typeof raw !== "object") return null;
+
+  const runId = str(raw.runId, 40);
+  const id = str(raw.id, 12);
+  const status = oneOf(raw.status, ["started", "finished"], null);
+
+  if (!RUN_ID_RE.test(runId) || !SCENARIO_ID_RE.test(id) || !status) return null;
+
+  return {
+    runId,
+    id,
+    name: str(raw.name, LIMITS.scenarioName),
+    status,
+    result: status === "finished" ? oneOf(raw.result, ["success", "error", "stopped"], "error") : null,
+    output: str(raw.output, LIMITS.scenarioOutput),
+    error: str(raw.error, 40),
+    trigger: oneOf(raw.trigger, RUN_TRIGGERS, "manual"),
+    ms: int(raw.ms, 0, 7 * 24 * 3600 * 1000, 0),
+  };
+};
+
+/** K → S `say`: a scenario step asks NODUS to say a text to the owner. */
+const sanitizeSay = (raw) => {
+  const text = str(raw?.text, LIMITS.sayText);
+
+  return text ? { text, runId: RUN_ID_RE.test(str(raw?.runId, 40)) ? str(raw.runId, 40) : null } : null;
 };
 
 /* ── parental control ── */
@@ -383,6 +480,9 @@ module.exports = {
   DEFAULT_FEATURES,
   DEFAULT_PREFS,
   APP_ID_RE,
+  SCENARIO_ID_RE,
+  RUN_ID_RE,
+  RUN_TRIGGERS,
   KEY_ALPHABET,
   KEY_BODY_LENGTH,
   normalizeKey,
@@ -393,6 +493,9 @@ module.exports = {
   sanitizeWol,
   sanitizeParental,
   sanitizeParentalUsage,
+  sanitizeScenarioRef,
+  sanitizeScenarioEvent,
+  sanitizeSay,
   PARENTAL_DEFAULTS,
   ALERT_KINDS,
   isFeatureEnabled,

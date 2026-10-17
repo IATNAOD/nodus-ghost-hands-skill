@@ -1,10 +1,11 @@
 // dev-host.js - the skill in plain Node, without a NODUS device:
-//   node tools/dev-host.js [--port 47300] [--panel 8080] [--female] [--en]
+//   node tools/dev-host.js [--port 47300] [--panel 8080] [--female] [--en] [--key-file dev-key.txt]
 // - the real WebSocket server for PCs (the Electron client or tools/fake-client.js);
 // - a mini panel at http://localhost:<panel>/ with the personal page ("Мои настройки")
 //   and its routes for a dev user;
 // - a console: type a phrase as if said to NODUS, answer its questions, see the reply.
 // Data lives in memory: a restart forgets keys and PCs (the dev key is printed at start).
+// --key-file keeps the key between restarts: a paired dev client reconnects by itself.
 "use strict";
 
 const http = require("http");
@@ -17,6 +18,7 @@ const GhostHands = require(path.join(skillDir, "index.js"));
 const routes = require(path.join(skillDir, "routes/index.js"));
 const { createMemoryStore } = require(path.join(skillDir, "lib/store.js"));
 const { generateKey, hashKey } = require(path.join(skillDir, "lib/keys.js"));
+const { normalizeKey } = require(path.join(skillDir, "lib/protocol.js"));
 const { classify } = require(path.join(skillDir, "lib/parse.js"));
 const { runCommand } = require(path.join(skillDir, "lib/command.js"));
 const { fakeCtx, captureRoutes } = require(path.join(skillDir, "test/fakes.js"));
@@ -61,7 +63,20 @@ async function main() {
 
   skill.store = createMemoryStore();
 
-  const key = generateKey();
+  const keyFile = arg("key-file", null);
+  let key = null;
+
+  if (keyFile) {
+    try {
+      key = normalizeKey(fs.readFileSync(keyFile, "utf8").trim());
+    } catch {
+      // no file yet
+    }
+  }
+  if (!key) {
+    key = generateKey();
+    if (keyFile) fs.writeFileSync(keyFile, `${key}\n`);
+  }
 
   await skill.store.keys.put(USER.id, { userName: USER.name, keyHash: hashKey(key), keyEnc: ctx.secrets.encrypt(key) });
   await skill.init(ctx);

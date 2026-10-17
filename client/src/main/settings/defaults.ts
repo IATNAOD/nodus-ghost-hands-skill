@@ -61,6 +61,6 @@ export const defaultSettings = (language: Language = "ru"): Settings => ({
     paused: false,
     countdownSec: 15,
   },
-  ui: { language, startHidden: true, autostart: true, closeToTray: true, autoUpdate: true },
+  ui: { language, startHidden: true, autostart: true, closeToTray: true, autoUpdate: true, scenarioPanic: "Control+Alt+Escape" },
   configRev: 1,
 });

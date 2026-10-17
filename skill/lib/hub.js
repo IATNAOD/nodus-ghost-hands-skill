@@ -17,6 +17,9 @@ const FAIL_WINDOW_MS = 10 * 60_000;
 const FAIL_LIMIT = 5;
 const MAX_SOCKETS = 64;
 const CLOSE_GRACE_MS = 1000;
+// messages of scenario runs a minute from one PC: started and finished of ~60 runs; spoken texts
+const SCENARIO_PER_MIN = 120;
+const SAY_PER_MIN = 5;
 
 const OPEN = 1;
 
@@ -49,7 +52,7 @@ class Hub {
    * @param {object} deps
    * @param {ReturnType<import("./store").createStore>} deps.store
    * @param {import("./name-index").NameIndex} deps.index
-   * @param {(type: string, data: object) => void} [deps.onEvent] "online", "offline", "config", "app-started", "app-stopped"
+   * @param {(type: string, data: object) => void} [deps.onEvent] "online", "offline", "config", "app-started", "app-stopped", "scenario", "say", ...
    * @param {(message: string) => void} [deps.log]
    * @param {string} [deps.version] skill version for `welcome`
    * @param {number} [deps.authTimeoutMs] time for the first message
@@ -158,6 +161,10 @@ class Hub {
         return this.bye(conn, message);
       case P.MSG.ALERT:
         return this.alert(conn, message);
+      case P.MSG.SCENARIO:
+        return this.scenario(conn, message);
+      case P.MSG.SAY:
+        return this.say(conn, message);
       default:
         return undefined;
     }
@@ -325,6 +332,36 @@ class Hub {
     if (device && P.ALERT_KINDS.includes(message.kind)) {
       this.onEvent("parental-alert", { device, kind: message.kind, until: Number.isFinite(until) ? until : null });
     }
+  }
+
+  /** A scenario run of the PC started or finished: blocks wait for it, NODUS scenarios react. */
+  scenario(conn, message) {
+    const device = this.index.get(conn.deviceId);
+    const event = P.sanitizeScenarioEvent(message);
+
+    if (device && event && this.allow(conn, "scenario", SCENARIO_PER_MIN)) this.onEvent("scenario", { device, event });
+  }
+
+  /** A scenario step asks NODUS to say something to the owner. */
+  say(conn, message) {
+    const device = this.index.get(conn.deviceId);
+    const say = P.sanitizeSay(message);
+
+    if (device && say && this.allow(conn, "say", SAY_PER_MIN)) this.onEvent("say", { device, ...say });
+  }
+
+  /** Not more than `max` messages of a kind a minute from one connection: a looping scenario stays quiet. */
+  allow(conn, kind, max) {
+    const now = Date.now();
+    const rates = (conn.rates ??= new Map());
+    const recent = (rates.get(kind) ?? []).filter((at) => now - at < 60_000);
+    const ok = recent.length < max;
+
+    if (ok) recent.push(now);
+    else if (recent.length === max) this.log(`${kind} from ${conn.deviceId}: more than ${max} a minute, dropped`);
+    rates.set(kind, recent);
+
+    return ok;
   }
 
   /** New parental rules, unlocks, resets reach the PC at once (only a client that knows them). */

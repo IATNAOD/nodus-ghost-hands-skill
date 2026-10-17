@@ -1,7 +1,9 @@
 // Types shared by the main process, the preload script and the UI.
+import type { ImageRef, Point, RegionSel, RunEvent, RunInfo, RunRecord, Scenario, ScenarioSummary, Value } from "./scenarios/model";
+import type { Issue } from "./scenarios/validate";
 
-export type Feature = "launch" | "close" | "volume" | "media" | "power" | "lock" | "display" | "search" | "wake" | "toast";
-export const FEATURES: Feature[] = ["launch", "close", "volume", "media", "power", "lock", "display", "search", "wake", "toast"];
+export type Feature = "launch" | "close" | "volume" | "media" | "power" | "lock" | "display" | "search" | "wake" | "toast" | "scenarios";
+export const FEATURES: Feature[] = ["launch", "close", "volume", "media", "power", "lock", "display", "search", "wake", "toast", "scenarios"];
 
 export type SearchEngine = "google" | "yandex" | "bing" | "duckduckgo";
 export type AppKind = "game" | "app" | "site";
@@ -26,6 +28,8 @@ export interface UiPrefs {
   autostart: boolean;
   closeToTray: boolean;
   autoUpdate: boolean;
+  /** the global hotkey that stops every scenario run (Electron accelerator) */
+  scenarioPanic: string;
 }
 
 export interface AppView {
@@ -100,6 +104,52 @@ export interface UiState {
   /** the skill this PC talks to: its version (null before the first connection) and match threshold */
   skill: { version: string | null; accept: number };
   parental: ParentalView;
+  scenarios: ScenarioSummary[];
+  /** runs going on now */
+  runs: RunInfo[];
+}
+
+/* ── scenarios ── */
+
+export interface VariablesView {
+  global: Record<string, Value>;
+  scenarios: Record<string, Record<string, Value>>;
+}
+
+export type ScenarioStart = { ok: true; runId: string; name: string; already?: boolean; queued?: boolean } | { ok: false; code: string };
+
+/** A display for the monitor pickers: Electron id, physical bounds of the virtual desktop. */
+export interface DisplayInfo {
+  id: string;
+  name: string;
+  primary: boolean;
+  /** physical pixels */
+  bounds: { x: number; y: number; w: number; h: number };
+  scale: number;
+}
+
+/** What an imported scenario would do, shown before it is added. */
+export interface ImportPreview {
+  token: string;
+  name: string;
+  description: string;
+  steps: number;
+  launches: string[];
+  paths: string[];
+  urls: string[];
+  keys: string[];
+  clicks: boolean;
+  text: boolean;
+  power: string[];
+  say: boolean;
+  hotkeys: string[];
+  schedules: string[];
+}
+
+/** Would NODUS understand the voice name of a scenario? */
+export interface ScenarioNameCheck {
+  /** each name: what "запусти <name> на компьютере" gives */
+  names: { name: string; ok: boolean; intent: string | null; reason: "ok" | "reserved" | "same-as-app" | "duplicate" | "ambiguous" | "other-intent" | "empty"; other?: string }[];
 }
 
 /** Parental control in short: the main window and the tray. */
@@ -231,13 +281,47 @@ export interface GhostApi {
   takePairLink(): Promise<PairLink | null>;
   /** a deep link arrived: call takePairLink() */
   onPairLink(listener: () => void): () => void;
+
+  getScenario(id: string): Promise<{ scenario: Scenario; issues: Issue[] } | null>;
+  createScenario(name: string): Promise<Scenario>;
+  saveScenario(scenario: Scenario): Promise<{ scenario: Scenario; issues: Issue[] }>;
+  deleteScenario(id: string): Promise<void>;
+  runScenario(id: string, options?: { fromNodeId?: string }): Promise<ScenarioStart>;
+  stopScenario(selector: { runId?: string; scenarioId?: string; all?: boolean }): Promise<number>;
+  getRuns(scenarioId?: string): Promise<RunInfo[]>;
+  getRunLog(runId: string): Promise<RunRecord | null>;
+  /** live run events for the editor while it is open */
+  setRunEvents(on: boolean): Promise<void>;
+  onRunEvents(listener: (events: RunEvent[]) => void): () => void;
+  /** "open at the failing step" from a notification */
+  onOpenScenario(listener: (target: { id: string; nodeId?: string }) => void): () => void;
+  getVariables(): Promise<VariablesView>;
+  setVariable(scope: "scenario" | "global", scenarioId: string, name: string, value: Value): Promise<void>;
+  deleteVariable(scope: "scenario" | "global", scenarioId: string, name: string): Promise<void>;
+  /** a sample as a data: URL for the editor */
+  getAsset(asset: string): Promise<string | null>;
+  exportScenario(id: string): Promise<boolean>;
+  importScenario(): Promise<ImportPreview | null>;
+  confirmImport(token: string): Promise<Scenario>;
+  captureTemplate(): Promise<ImageRef | null>;
+  pickPoint(): Promise<Point | null>;
+  pickRegion(): Promise<RegionSel | null>;
+  listDisplays(): Promise<DisplayInfo[]>;
+  getOcrLanguages(): Promise<{ tag: string; name: string }[]>;
+  /** is an accelerator free for a scenario hotkey */
+  checkHotkey(accelerator: string, scenarioId: string): Promise<{ ok: boolean; reason?: "invalid" | "taken" | "duplicate" | "panic" }>;
+  /** while the key recorder has focus, global hotkeys are off */
+  suspendHotkeys(on: boolean): Promise<void>;
+  checkScenarioName(id: string, names: string[]): Promise<ScenarioNameCheck>;
 }
 
 export const IPC = {
   state: "gh:state",
   pairLink: "gh:pair-link",
   invoke: "gh:invoke",
+  runEvents: "gh:run-events",
+  openScenario: "gh:open-scenario",
 } as const;
 
 /** Methods of GhostApi called through one invoke channel: [method, ...args] */
-export type InvokeMethod = Exclude<keyof GhostApi, "onState" | "onPairLink">;
+export type InvokeMethod = Exclude<keyof GhostApi, "onState" | "onPairLink" | "onRunEvents" | "onOpenScenario">;

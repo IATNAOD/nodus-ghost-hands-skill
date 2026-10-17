@@ -40,6 +40,10 @@ const demoIndex = () => {
         ["start:telegram", "Telegram"],
         ["virtual:browser", "Браузер"],
       ]),
+      scenarios: [
+        { id: "scnstream001", name: "Режим стрима", aliases: ["стрим"], spoken: "", voice: true },
+        { id: "scnmorning01", name: "Утро", aliases: [], spoken: "", voice: true },
+      ],
     },
   });
   index.upsert({
@@ -48,7 +52,7 @@ const demoIndex = () => {
     online: true,
     config: { name: "Ноутбук", aliases: ["рабочий"], apps: apps([["start:chrome", "Google Chrome", ["хром"]], ["start:word", "Microsoft Word", ["ворд"]]]) },
   });
-  index.setState("d1", { running: [{ key: "exe:dota2", name: "Dota 2", appId: "steam:570", game: true, fg: true }] });
+  index.setState("d1", { running: [{ key: "exe:dota2", name: "Dota 2", appId: "steam:570", game: true, fg: true }], scenarios: [{ id: "scnstream001", runId: "run1234567" }] });
   // the kids' PC under parental control
   index.upsert({ deviceId: "d3", userId: "u1", config: { name: "Детский", aliases: [], apps: [] }, online: true });
   index.setParental("d3", true);
@@ -127,7 +131,24 @@ const CASES = [
   ["bring back the limits on the pc", "pc_parental"],
   ["что запущено на компьютере", "pc_status"],
   ["which computers are online", "pc_status"],
+  // scenarios of the PC: by name like apps, or with "сценарий" and the PC
+  ["запусти режим стрима", "launch_app"],
+  ["включи режим стрима", "launch_app"],
+  ["запусти утро", "launch_app"],
+  ["запусти утро на компьютере", "launch_app"],
+  ["запусти сценарий режим стрима на компьютере", "pc_scenario"],
+  ["запусти сценарий уборка на компьютере", "pc_scenario"],
+  ["выполни на компьютере сценарий утро", "pc_scenario"],
+  ["останови сценарий на компьютере", "pc_scenario"],
+  ["останови все сценарии на компьютере", "pc_scenario"],
+  ["останови режим стрима", "pc_scenario"],
+  ["run the scenario morning on the computer", "pc_scenario"],
+  ["run the morning scenario on the computer", "pc_scenario"],
+  ["stop the scenario on the pc", "pc_scenario"],
+  ["останови музыку на компьютере", "pc_media"],
   // NODUS keeps these
+  ["останови сценарий", null],
+  ["включи гостевой режим", null],
   ["включи свет", null],
   ["выключи свет на кухне", null],
   ["открой шторы", null],
@@ -150,7 +171,7 @@ const CASES = [
   ["сколько стоит компьютер", null],
 ];
 
-const OURS = new Set(["launch_app", "close_app", "pc_power", "pc_wake", "pc_volume", "pc_media", "pc_search", "pc_status"]);
+const OURS = new Set(["launch_app", "close_app", "pc_power", "pc_wake", "pc_volume", "pc_media", "pc_search", "pc_status", "pc_scenario"]);
 
 /** Route one phrase like the NODUS router does. */
 const evaluate = (phrase, index, { scenarioPhrase = false } = {}) => {

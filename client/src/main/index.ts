@@ -16,6 +16,7 @@ const METHODS = new Set<InvokeMethod>([
   "getState", "pair", "unpair", "reconnect", "setDevice", "setServer", "setApp", "addApp", "removeApp", "listStartApps",
   "addStartApps", "pickExecutable", "rescan", "testLaunch", "setFeatures", "setPrefs", "setUi", "checkPhrase",
   "checkUpdates", "installUpdate", "openLogs", "openExternal", "cancelCountdown", "takePairLink",
+  "getScenario", "createScenario", "saveScenario", "deleteScenario", "runScenario", "stopScenario", "getRuns", "getRunLog", "setRunEvents", "getVariables", "setVariable", "deleteVariable", "getAsset", "exportScenario", "importScenario", "confirmImport", "captureTemplate", "pickPoint", "pickRegion", "listDisplays", "getOcrLanguages", "checkHotkey", "suspendHotkeys", "checkScenarioName",
 ]);
 
 /** ghosthands://pair?key=GH-...&host=project-nod.local&port=47300 from the personal page */
@@ -36,7 +37,8 @@ const pairLinkOf = (argv: string[]): PairLink | null => {
 
 // a run from the sources has its own settings and single-instance lock: the installed app may
 // work at the same time, and a second instance would hand it the deep link and quit
-if (!app.isPackaged) app.setPath("userData", path.join(app.getPath("appData"), `${app.getName()} (dev)`));
+// (tests point it to a temporary folder with GH_PROFILE_DIR)
+if (!app.isPackaged) app.setPath("userData", process.env.GH_PROFILE_DIR || path.join(app.getPath("appData"), `${app.getName()} (dev)`));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -158,6 +160,22 @@ if (!app.requestSingleInstanceLock()) {
     });
     core.on("state", (state) => {
       if (window && !window.isDestroyed()) window.webContents.send(IPC.state, state);
+    });
+    // scenarios: live run events for the editor, "open at the failing step", windows hidden from capture
+    core.on("run-events", (events) => {
+      if (window && !window.isDestroyed()) window.webContents.send(IPC.runEvents, events);
+    });
+    core.on("open-scenario", (target) => {
+      showWindow();
+      if (window && !window.isDestroyed()) window.webContents.send(IPC.openScenario, target);
+    });
+    core.on("protect", (on: boolean) => {
+      if (window && !window.isDestroyed()) window.setContentProtection(on);
+    });
+    core.on("hide-main", (hidden: boolean) => {
+      if (!window || window.isDestroyed()) return;
+      if (hidden) window.hide();
+      else showWindow();
     });
     createTray(core, showWindow, quit);
     core.applyAutostart();

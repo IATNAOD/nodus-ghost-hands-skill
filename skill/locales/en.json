@@ -58,7 +58,8 @@
     "app_stopped": { "label": "App or game closed on a computer" },
     "parental_limit": { "label": "Parental control: time on the computer or in games is over" },
     "parental_extended": { "label": "Parental control: time extended with the button" },
-    "parental_alert": { "label": "Parental control: Ghost Hands was closed, the computer vanished or a PIN was entered" }
+    "parental_alert": { "label": "Parental control: Ghost Hands was closed, the computer vanished or a PIN was entered" },
+    "pc_scenario_finished": { "label": "A scenario on the computer finished" }
   },
   "parental": {
     "killed": "Ghost Hands on {{pc}} was force-closed and started again",
@@ -128,6 +129,20 @@
       "keywords": "computer pc turn on wake wake on lan",
       "inputs": { "computer": "Computer (empty - the only one)" },
       "outputs": { "computer": "Computer", "already": "Was already on" }
+    },
+    "pc_run_scenario": {
+      "label": "Scenario on computer",
+      "description": "Runs a Ghost Hands scenario on the owner's computer and waits for it to end. If the scenario fails or is stopped, the step fails too. Stopping this NODUS scenario stops the scenario on the computer as well.",
+      "summary": "Run {{scenario}}",
+      "keywords": "computer pc scenario ghost hands macro keys click automation",
+      "inputs": {
+        "scenario": "Scenario on the computer",
+        "computer": "Computer (empty - the only one online)",
+        "text": "Text for the scenario (the Start node's Text)",
+        "wait": "Wait until it ends",
+        "timeout": "Wait no longer than (the scenario keeps running)"
+      },
+      "outputs": { "status": "Result", "output": "Scenario output", "scenario": "Scenario", "computer": "Computer" }
     }
   },
   "common": {
@@ -174,7 +189,10 @@
     "unknown_action": "The client on {{pc}} doesn't know this command. Update it.",
     "busy": "{{pc}} is busy. Try again.",
     "parental_limit": "Time on {{pc}} is over for today.",
-    "internal": "I couldn't run the command on {{pc}}."
+    "internal": "I couldn't run the command on {{pc}}.",
+    "scenario_not_found": "{{pc}} has no such scenario, or it is turned off.",
+    "scenario_busy": "Too many scenarios are already running on {{pc}}.",
+    "scenario_invalid": "The scenario {{name}} has errors. Open it in Ghost Hands on {{pc}}."
   },
   "intents": {
     "launch_app": {
@@ -192,7 +210,12 @@
       "done_many": "Starting {{names, list}}.",
       "done_many_on_pc": "Starting {{names, list}} on {{pc}}.",
       "deferred": "Turning on {{pc}}. I'll start {{names, list}} when it boots.",
-      "deferred_failed": "I couldn't start {{names, list}}: {{pc}} never came online"
+      "deferred_failed": "I couldn't start {{names, list}}: {{pc}} never came online",
+      "scenario_option": "the scenario {{name}}",
+      "scenario_started": "Running the scenario {{name}}.",
+      "scenario_started_on_pc": "Running the scenario {{name}} on {{pc}}.",
+      "scenario_already": "The scenario {{name}} is already running.",
+      "scenario_already_on_pc": "The scenario {{name}} is already running on {{pc}}."
     },
     "close_app": {
       "label": "Close an app or a game on the computer",
@@ -318,7 +341,24 @@
       "label": "Computer control: start and close apps and games, shutdown, volume, music and web search",
       "error": "I couldn't run the command on the computer.",
       "unknown": "There is no such command for the computer."
+    },
+    "pc_scenario": {
+      "label": "Ghost Hands scenarios on the computer: run or stop",
+      "error": "I couldn't run the scenario on the computer.",
+      "what": "Which scenario should I run?",
+      "confirm": "Run the scenario {{name}}?",
+      "not_found": "I couldn't find the scenario {{name}} on your computers.",
+      "not_running": "The scenario {{name}} isn't running.",
+      "nothing_running": "No scenario is running on your computers.",
+      "nothing_running_on_pc": "No scenario is running on {{pc}}.",
+      "stopped": "Stopped the scenario {{name}}.",
+      "stopped_all": "Stopped the scenarios.",
+      "stopped_all_on_pc": "Stopped the scenarios on {{pc}}.",
+      "stopped_everywhere": "Stopped the scenarios on all computers."
     }
+  },
+  "scenarios": {
+    "say": "{{pc}}: {{text}}"
   },
   "time": {
     "at": "at {{at}}",

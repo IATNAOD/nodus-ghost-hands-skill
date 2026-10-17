@@ -32,7 +32,7 @@ export interface Welcome {
   deviceId: string;
   name: string;
   owner: { name: string; id?: string };
-  server: { version: string; protoMin: number; protoMax: number };
+  server: { version: string; protoMin: number; protoMax: number; caps?: unknown[] };
   /** skill settings the PC needs; also sent as a "settings" message after a change */
   settings?: SkillSettings;
   created: boolean;

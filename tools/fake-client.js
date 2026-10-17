@@ -2,6 +2,8 @@
 //   node tools/fake-client.js --key GH-XXXX-... [--host 127.0.0.1] [--port 47300] [--name Игровой] [--shared]
 // Sends hello, a config with a few apps and the state; prints every command and answers it.
 // Parental control: prints the rules it gets and reports an hour on the PC, 20 minutes in games.
+// Scenarios: «Режим стрима», «Утро» (voice) and «Резервная копия» (blocks only); a run lasts
+// 3 s (--scenario-sec), reports started/finished and, with --say, asks NODUS to say something.
 "use strict";
 
 const os = require("os");
@@ -35,6 +37,14 @@ const apps = [
   { id: "start:discord", name: "Discord", aliases: [], kind: "app", source: "start" },
   { id: "virtual:browser", name: "Браузер", aliases: ["browser"], kind: "app", source: "virtual" },
 ];
+const scenarios = [
+  { id: "scnstream001", name: "Режим стрима", aliases: ["стрим"], spoken: "", voice: true },
+  { id: "scnmorning01", name: "Утро", aliases: [], spoken: "", voice: true },
+  { id: "scnbackup001", name: "Резервная копия", aliases: [], spoken: "", voice: false },
+];
+const scenarioMs = Number(arg("scenario-sec", 3)) * 1000;
+/** runId → { id, name, timer, startedAt, trigger } */
+const runs = new Map();
 const pc = { volume: 40, muted: false, running: new Map([["exe:discord", { key: "exe:discord", name: "Discord", appId: "start:discord", game: false, fg: false }]]), shutdownAt: null };
 let deviceId = arg("device-id", null);
 let rev = 1;
@@ -52,7 +62,20 @@ const state = () => ({
   muted: pc.muted,
   shutdownAt: pc.shutdownAt,
   parental: parental.enabled ? { day: today(), pcSec: 3600, gameSec: 1200, extended: { pc: 1, games: 0 }, locked: null } : undefined,
+  scenarios: [...runs].map(([runId, run]) => ({ id: run.id, runId })),
 });
+
+/** A run ends: the skill hears "finished" (blocks waiting for it, the NODUS event). */
+function finish(ws, runId, result) {
+  const run = runs.get(runId);
+
+  if (!run) return;
+  clearTimeout(run.timer);
+  runs.delete(runId);
+  ws.send(P.encode(P.MSG.SCENARIO, { runId, id: run.id, name: run.name, status: "finished", result, output: result === "success" ? "готово" : "", error: result === "error" ? "focus-lost" : undefined, trigger: run.trigger, ms: Date.now() - run.startedAt }));
+  ws.send(P.encode(P.MSG.STATE, { data: state() }));
+  console.log(`✓ scenario «${run.name}» ${result}`);
+}
 
 function handle(ws, message) {
   const { id, action, args = {} } = message;
@@ -101,6 +124,31 @@ function handle(ws, message) {
     }
     case "media.control":
       return reply({ ok: true, data: { op: args.op } });
+    case "scenario.run": {
+      const scenario = scenarios.find((item) => item.id === args.id);
+
+      if (!scenario) return reply({ ok: false, code: "scenario-not-found" });
+
+      const going = [...runs].find(([, run]) => run.id === scenario.id);
+
+      if (going) return reply({ ok: true, data: { runId: going[0], name: scenario.name, already: true } });
+
+      const runId = P.RUN_ID_RE.test(String(args.runId ?? "")) ? args.runId : crypto.randomBytes(8).toString("hex");
+      const trigger = args.via === "nodus" ? "nodus" : "voice";
+
+      runs.set(runId, { id: scenario.id, name: scenario.name, trigger, startedAt: Date.now(), timer: setTimeout(() => finish(ws, runId, "success"), scenarioMs) });
+      ws.send(P.encode(P.MSG.SCENARIO, { runId, id: scenario.id, name: scenario.name, status: "started", trigger }));
+      ws.send(P.encode(P.MSG.STATE, { data: state() }));
+      if (flag("say")) ws.send(P.encode(P.MSG.SAY, { text: `Сценарий «${scenario.name}» начался`, runId }));
+      reply({ ok: true, data: { runId, name: scenario.name } });
+      return undefined;
+    }
+    case "scenario.stop": {
+      const stop = [...runs].filter(([runId, run]) => args.all === true || runId === args.runId || run.id === args.id);
+
+      for (const [runId] of stop) finish(ws, runId, "stopped");
+      return reply({ ok: true, data: { stopped: stop.length } });
+    }
     case "power.cancel": {
       const cancelled = Boolean(pc.shutdownAt);
 
@@ -130,7 +178,7 @@ function connect() {
       case P.MSG.WELCOME:
         deviceId = message.deviceId;
         console.log(`✓ connected as ${message.name} (${deviceId}), owner ${message.owner.name}`);
-        ws.send(P.encode(P.MSG.CONFIG, { rev: rev++, data: { name, shared: flag("shared"), apps, features: {}, prefs: { confirmPower: true, searchEngine: "google" }, wol: { mac: "02:00:00:00:00:01", broadcast: "192.168.0.255", adapter: "ethernet" }, client: { version: "0.0.0-fake", os: "Windows 10" } } }));
+        ws.send(P.encode(P.MSG.CONFIG, { rev: rev++, data: { name, shared: flag("shared"), apps, scenarios, features: {}, prefs: { confirmPower: true, searchEngine: "google" }, wol: { mac: "02:00:00:00:00:01", broadcast: "192.168.0.255", adapter: "ethernet" }, client: { version: "0.0.0-fake", os: "Windows 10" } } }));
         ws.send(P.encode(P.MSG.STATE, { data: state() }));
         break;
       case P.MSG.CONFIG_ACK:

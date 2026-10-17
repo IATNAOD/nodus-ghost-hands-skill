@@ -14,6 +14,10 @@ const { stemWord } = require("./nodus-routing");
 const BUILTIN = require("./nodus-builtin");
 
 const SCORES = Object.freeze({
+  // "запусти сценарий X на компьютере": above NODUS's own run_scenario/stop_scenario (~10 + 15)
+  scenario: 38,
+  // "останови режим стрима" while that scenario of the PC runs
+  scenarioRunning: 36,
   parental: 36,
   volume: 36,
   media: 36,
@@ -43,6 +47,11 @@ const LAUNCH_STRONG = [
 const LAUNCH_SOFT = ["открой", "открыть", "откройте", "включи", "включить", "включите", "вруби", "врубай", "врубить", "open", "play", "turn on", "fire up"];
 const LAUNCH_VERBS = split([...LAUNCH_STRONG, ...LAUNCH_SOFT]);
 const STRONG = new Set(LAUNCH_STRONG);
+
+// scenarios of the PC: «запусти сценарий утро на компьютере», «останови все сценарии на компьютере»
+const SCENARIO_WORDS = new Set(["сценарий", "сценарии", "сценария", "сценариев", "сценарию", "scenario", "scenarios"]);
+const EXEC_VERBS = split(["выполни", "выполнить", "выполните", "execute"]);
+const STOP_VERBS = split(["останови", "остановить", "остановите", "прекрати", "прекратить", "прерви", "прервать", "stop", "abort"]);
 
 const CLOSE_VERBS = split([
   "закрой", "закрыть", "закройте", "заверши", "завершить", "выйди из", "выйти из", "выключи", "выключить",
@@ -481,6 +490,44 @@ function closeRule({ words, index, pool }) {
   return null;
 }
 
+function scenarioRule({ words, index, pool }) {
+  if (!pool.length) return null;
+
+  const stop = phraseAtStart(words, STOP_VERBS);
+  const verb = stop ?? phraseAtStart(words, LAUNCH_VERBS) ?? phraseAtStart(words, EXEC_VERBS);
+
+  if (!verb) return null;
+
+  const { rest, pc } = objectWords(words.slice(verb.end), index, pool);
+  const all = rest.some((word) => ALL_WORDS.has(word));
+  const plain = rest.filter((word) => !ALL_WORDS.has(word));
+  // «сценарий утро», and the English order «the morning scenario»
+  const head = plain.length > 0 && SCENARIO_WORDS.has(plain[0]);
+  const tail = !head && plain.length > 1 && SCENARIO_WORDS.has(plain.at(-1));
+  const marker = head || tail;
+  const name = head ? plain.slice(1) : tail ? plain.slice(0, -1) : plain;
+  const params = { op: stop ? "stop" : "run", object: name.join(" "), all: false, pc: pcSummary(pc, words.slice(verb.end)) };
+
+  if (marker) {
+    // without the PC "сценарий" is NODUS's own scenario
+    if (!pc) return null;
+    if (stop) {
+      params.all = all || !name.length;
+      return { intent: "pc_scenario", score: SCORES.scenario, params };
+    }
+    return name.length ? { intent: "pc_scenario", score: SCORES.scenario, params } : null;
+  }
+
+  // «останови режим стрима»: a scenario of the PC that runs now
+  const devices = devicesFor(pc, pool);
+  if (stop && name.length && devices.some((device) => device.runningScenarios?.length)) {
+    const found = index.matchApps(name.join(" "), devices, { scenarios: "only", voiceOnly: false, runningScenarios: true });
+
+    if (found.status === "match" || (pc && found.status !== "none")) return { intent: "pc_scenario", score: SCORES.scenarioRunning, params };
+  }
+  return null;
+}
+
 function launchRule({ words, index, pool }) {
   const verb = phraseAtStart(words, LAUNCH_VERBS);
 
@@ -516,11 +563,16 @@ function launchRule({ words, index, pool }) {
   params.objects = named.map((object) => object.join(" "));
 
   const reserved = named.some(isReserved);
-
-  if (reserved && !pc) return null;
-
   const devices = devicesFor(pc, pool);
-  const statuses = named.map((object) => index.matchApps(object.join(" "), devices).status);
+
+  if (reserved && !pc) {
+    // «запусти режим стрима»: NODUS's words are ours only as the exact voice name of a PC scenario
+    const scenario = named.length === 1 ? index.matchApps(named[0].join(" "), devices, { scenarios: "only" }) : null;
+
+    if (!scenario || scenario.status !== "match" || (scenario.best?.score ?? 0) < 0.97) return null;
+  }
+
+  const statuses = named.map((object) => index.matchApps(object.join(" "), devices, { scenarios: "include" }).status);
 
   if (statuses.every((status) => status === "match")) return { intent: "launch_app", score: pc ? SCORES.appMatchOnPc : SCORES.appMatch, params };
   if (statuses.every((status) => status !== "none")) return strong || pc || params.marked ? { intent: "launch_app", score: SCORES.appWeak, params } : null;
@@ -573,7 +625,7 @@ function parentalRule({ words, index }) {
   return { intent: "pc_parental", score: SCORES.parental, params: { op, minutes: op === "grant" ? durationOf(words) : null, pc: pcSummary(pc, words) } };
 }
 
-const RULES = [parentalRule, volumeRule, mediaRule, searchRule, powerRule, wakeRule, closeRule, launchRule];
+const RULES = [parentalRule, scenarioRule, volumeRule, mediaRule, searchRule, powerRule, wakeRule, closeRule, launchRule];
 
 /**
  * Which of our intents a phrase belongs to.
@@ -620,4 +672,4 @@ const classify = (text, options = {}) => {
   return result;
 };
 
-module.exports = { classify, classifyNow, pcMentions, splitObjects, isReserved, SCORES, RESERVED };
+module.exports = { classify, classifyNow, pcMentions, splitObjects, isReserved, SCORES, RESERVED, SCENARIO_WORDS };

@@ -13,7 +13,7 @@ const { prepare, prepareApp, scoreApp, decide, appKey, ACCEPT } = require("./nam
 const MIN_ACCEPT = 0.6;
 const { PC_WORDS } = require("./text");
 
-const EMPTY_STATE = Object.freeze({ running: [], volume: null, muted: null, shutdownAt: null });
+const EMPTY_STATE = Object.freeze({ running: [], volume: null, muted: null, shutdownAt: null, scenarios: [] });
 
 const levenshtein = (a, b) => {
   let previous = [...Array(b.length + 1).keys()];
@@ -76,6 +76,8 @@ class NameIndex {
     const previous = this.devices.get(record.deviceId);
     const config = record.config ?? {};
     const apps = (config.apps ?? []).map(prepareApp);
+    // scenarios of the PC: matched like apps, but only where a caller asks for them
+    const scenarios = (config.scenarios ?? []).map((scenario) => ({ ...prepareApp(scenario), kind: "scenario", voice: scenario.voice !== false }));
 
     dropSharedAutoAliases(apps);
 
@@ -92,11 +94,15 @@ class NameIndex {
       client: config.client ?? {},
       apps,
       appById: new Map(apps.map((app) => [app.id, app])),
+      scenarios,
+      scenarioById: new Map(scenarios.map((scenario) => [scenario.id, scenario])),
       names: [config.name, ...(config.aliases ?? [])].filter(Boolean).map(nameVariant).filter(Boolean),
       online: record.online ?? previous?.online ?? false,
       lastSeenAt: record.lastSeenAt ? new Date(record.lastSeenAt).getTime() : previous?.lastSeenAt ?? 0,
       state: previous?.state ?? EMPTY_STATE,
       running: previous?.running ?? [],
+      // scenario runs going on now: { id, runId }
+      runningScenarios: previous?.runningScenarios ?? [],
       // under parental control: its owner may lift the limits by voice
       parental: previous?.parental ?? false,
     };
@@ -116,6 +122,7 @@ class NameIndex {
     if (!online) {
       entry.state = EMPTY_STATE;
       entry.running = [];
+      entry.runningScenarios = [];
     }
     this.version++;
   }
@@ -130,6 +137,7 @@ class NameIndex {
       ...item,
       prepared: item.appId && entry.appById.has(item.appId) ? entry.appById.get(item.appId) : prepareApp({ id: `run:${item.key}`, name: item.name }),
     }));
+    entry.runningScenarios = (state?.scenarios ?? []).filter((run) => entry.scenarioById.has(run.id));
     this.version++;
   }
 
@@ -203,16 +211,32 @@ class NameIndex {
    * Apps that match a spoken object on the given PCs.
    * @param {string} spoken "доту", "ведьмака три"
    * @param {object[]} devices
-   * @param {{ running?: boolean, configured?: boolean }} options running - also apps open now
+   * @param {{ running?: boolean, configured?: boolean, scenarios?: "exclude"|"include"|"only", voiceOnly?: boolean, runningScenarios?: boolean }} options
+   *   running - also apps open now; scenarios - also (or only) scenarios of the PC, by default
+   *   only those with a voice name (voiceOnly); runningScenarios - only scenario runs going on now
    * @returns {{ status: string, best: object|null, options: object[], candidates: object[] }}
    */
-  matchApps(spoken, devices, { running = false, configured = true } = {}) {
+  matchApps(spoken, devices, { running = false, configured = true, scenarios = "exclude", voiceOnly = true, runningScenarios = false } = {}) {
     const tokens = prepare(spoken);
     const candidates = [];
 
     if (!tokens.length) return { status: "none", best: null, options: [], candidates };
 
     for (const device of devices) {
+      if (scenarios !== "exclude") {
+        const busy = new Set(device.runningScenarios.map((run) => run.id));
+
+        for (const scenario of device.scenarios) {
+          if ((voiceOnly && !scenario.voice) || (runningScenarios && !busy.has(scenario.id))) continue;
+
+          const { score, coverage } = scoreApp(tokens, scenario);
+
+          if (score >= 0.6) {
+            candidates.push({ key: `scenario ${appKey(scenario.name)}`, deviceId: device.deviceId, appId: null, scenarioId: scenario.id, runningKey: null, name: scenario.name, app: scenario, score, coverage, kind: "scenario", running: busy.has(scenario.id) });
+          }
+        }
+        if (scenarios === "only") continue;
+      }
       if (configured) {
         for (const app of device.apps) {
           const { score, coverage } = scoreApp(tokens, app);

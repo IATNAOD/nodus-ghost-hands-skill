@@ -109,6 +109,7 @@
     { "id": "app_stopped", "label": "events.app_stopped.label", "outputs": ["text", "from", "computer", "app", "kind"] },
     { "id": "parental_limit", "label": "events.parental_limit.label", "outputs": ["text", "from", "computer", "limit"] },
     { "id": "parental_extended", "label": "events.parental_extended.label", "outputs": ["text", "from", "computer"] },
-    { "id": "parental_alert", "label": "events.parental_alert.label", "outputs": ["text", "from", "computer", "alert"] }
+    { "id": "parental_alert", "label": "events.parental_alert.label", "outputs": ["text", "from", "computer", "alert"] },
+    { "id": "pc_scenario_finished", "label": "events.pc_scenario_finished.label", "outputs": ["text", "from", "computer", "scenario", "status", "output", "error"] }
   ]
 }

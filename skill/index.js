@@ -15,6 +15,7 @@ const { ScenarioEvents } = require("./lib/events");
 const { Deferred } = require("./lib/deferred");
 const { RecentChoices } = require("./lib/select");
 const { ParentalService } = require("./lib/parental");
+const { ScenarioWaiters } = require("./lib/scenarios");
 const state = require("./lib/state");
 const { trace } = require("./lib/trace");
 const wol = require("./lib/wol");
@@ -38,6 +39,8 @@ class GhostHands {
     this.events = null;
     this.deferred = null;
     this.parental = null;
+    /** runs of PC scenarios that blocks wait for */
+    this.waiters = new ScenarioWaiters();
     this.recent = new RecentChoices();
     this.configs = [];
     this.settings = readSettings([]);
@@ -118,6 +121,7 @@ class GhostHands {
         case "offline":
           this.events.offline(data.device);
           this.parental.offline(data.device, data.reason);
+          this.waiters.offline(data.device.deviceId);
           break;
         case "removed":
           this.parental.remove(data.deviceId).catch((error) => trace(`parental: ${error.message}`));
@@ -136,6 +140,14 @@ class GhostHands {
           break;
         case "app-stopped":
           this.events.app("app_stopped", data.device, data.app, data.item);
+          break;
+        case "scenario":
+          this.waiters.handle(data.device.deviceId, data.event);
+          if (data.event.status === "finished") this.events.scenario(data.device, data.event);
+          break;
+        case "say":
+          // a scenario step on the PC speaks to the PC's owner
+          this.notify(data.device.userId, this.ctx.t("scenarios.say", { pc: data.device.name, text: data.text }));
           break;
         default:
           break;
@@ -182,6 +194,7 @@ class GhostHands {
 
     this.events?.dispose();
     this.deferred?.dispose();
+    this.waiters.dispose();
     this.parental?.dispose();
 
     try {

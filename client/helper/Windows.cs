@@ -255,6 +255,54 @@ namespace GhostHelper
             return new Dictionary<string, object> { ["focused"] = ok };
         }
 
+        // ---- window.foreground → { pid, exe, rect, monitor, elevated } | { none: true } ----
+        // Physical pixels (DpiScope): scenarios check what is in front before input.
+        public static Dictionary<string, object> ForegroundInfo()
+        {
+            using (DpiScope.PerMonitorV2())
+            {
+                IntPtr hwnd = Native.GetForegroundWindow();
+                if (hwnd == IntPtr.Zero) return new Dictionary<string, object> { ["none"] = true };
+
+                Native.GetWindowThreadProcessId(hwnd, out uint pid);
+                var rect = FrameRect(hwnd);
+                return new Dictionary<string, object>
+                {
+                    ["pid"] = (int)pid,
+                    ["exe"] = Processes.GetImagePath((int)pid),
+                    ["rect"] = Screen.Rect(rect),
+                    ["monitor"] = Screen.MonitorAt((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2),
+                    ["elevated"] = InputGuard.IsElevated((int)pid)
+                };
+            }
+        }
+
+        // ---- window.rect { pid } → { rect, monitor, minimized } ----
+        public static Dictionary<string, object> RectOf(int pid)
+        {
+            using (DpiScope.PerMonitorV2())
+            {
+                IntPtr hwnd = FindMainWindow((uint)pid);
+                if (hwnd == IntPtr.Zero) throw new HelperException("not-running", "No window of pid " + pid + ".");
+
+                var rect = FrameRect(hwnd);
+                return new Dictionary<string, object>
+                {
+                    ["rect"] = Screen.Rect(rect),
+                    ["monitor"] = Screen.MonitorAt((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2),
+                    ["minimized"] = Native.IsIconic(hwnd)
+                };
+            }
+        }
+
+        // the visible frame, without the invisible resize borders of Windows 10
+        private static Native.RECT FrameRect(IntPtr hwnd)
+        {
+            if (Native.DwmGetWindowRect(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var frame, Marshal.SizeOf(typeof(Native.RECT))) == 0) return frame;
+            Native.GetWindowRect(hwnd, out var rect);
+            return rect;
+        }
+
         // First visible, titled top-level window belonging to pid.
         private static IntPtr FindMainWindow(uint pid)
         {

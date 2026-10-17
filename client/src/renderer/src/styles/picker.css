@@ -1,0 +1,102 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+  background: #000;
+}
+
+body {
+  font: 14px/1.5 var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.picker {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.picker > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* everything but the selection is dimmed */
+.picker .shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 6, 20, 0.35);
+  pointer-events: none;
+}
+
+.picker .selection {
+  position: absolute;
+  outline: 2px solid var(--purple);
+  box-shadow: 0 0 0 100000px rgba(10, 6, 20, 0.35);
+  pointer-events: none;
+}
+
+.picker .size {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: rgba(20, 12, 36, 0.9);
+  color: #fff;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.picker .cross-h,
+.picker .cross-v {
+  position: absolute;
+  background: rgba(173, 103, 255, 0.85);
+  pointer-events: none;
+}
+
+.picker .cross-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.picker .cross-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.picker .tip {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(173, 103, 255, 0.45);
+  background: rgba(20, 12, 36, 0.92);
+  color: #fff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.picker .tip kbd {
+  font: inherit;
+  font-size: 12px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+}

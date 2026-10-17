@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Download, FileText, Monitor, Network, Settings2, Unlink } from "lucide-react";
+import { fromAccelerator, toAccelerator } from "../../../shared/scenarios/keys";
 import type { Language, UiState } from "../../../shared/types";
 import { fill, useTexts } from "../i18n";
 import { Button, Card, ChipsEditor, Field, Locked, SwitchRow, useToast } from "../ui";
+import { KeyRecorder } from "../scenarios/fields";
 
 export function Settings({ state }: { state: UiState }) {
   const t = useTexts();
@@ -59,6 +61,18 @@ export function Settings({ state }: { state: UiState }) {
             <option value="ru">Русский</option>
             <option value="en">English</option>
           </select>
+        </Field>
+        <Field label={t.sc.panicTitle} hint={t.sc.panicHint}>
+          <div className="row">
+            <KeyRecorder
+              codes={fromAccelerator(state.ui.scenarioPanic)}
+              onChange={(codes) => {
+                const accelerator = toAccelerator(codes);
+                if (accelerator) void window.gh.setUi({ scenarioPanic: accelerator });
+                else toast("error", t.sc.hotkeyReason.invalid);
+              }}
+            />
+          </div>
         </Field>
       </Card>
 

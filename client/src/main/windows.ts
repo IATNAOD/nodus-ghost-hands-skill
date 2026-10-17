@@ -6,7 +6,7 @@ import type { OverlayHost } from "./exec/power";
 
 const BACKGROUND = "#120d1c";
 
-export type Page = "index" | "overlay" | "notice" | "lock";
+export type Page = "index" | "overlay" | "notice" | "lock" | "picker";
 
 const pageUrl = (page: Page, query: Record<string, string> = {}): { url?: string; file?: string; query: Record<string, string> } => {
   const devServer = process.env.ELECTRON_RENDERER_URL;

@@ -10,12 +10,15 @@ export default defineConfig({
     resolve: { alias: { "@skill": skillLib } },
     build: {
       commonjsOptions: { include: [/node_modules/, /skill[\\/]lib/] },
-      rollupOptions: { input: { index: resolve(__dirname, "src/main/index.ts") } },
+      // vision.js runs OpenCV in a utility process of its own
+      rollupOptions: { input: { index: resolve(__dirname, "src/main/index.ts"), vision: resolve(__dirname, "src/main/scenarios/vision/process.ts") } },
     },
   },
   preload: {
     build: {
-      rollupOptions: { input: { index: resolve(__dirname, "src/preload/index.ts"), parental: resolve(__dirname, "src/preload/parental.ts") } },
+      rollupOptions: {
+        input: { index: resolve(__dirname, "src/preload/index.ts"), parental: resolve(__dirname, "src/preload/parental.ts"), picker: resolve(__dirname, "src/preload/picker.ts") },
+      },
     },
   },
   renderer: {
@@ -29,8 +32,10 @@ export default defineConfig({
           overlay: resolve(__dirname, "src/renderer/overlay.html"),
           notice: resolve(__dirname, "src/renderer/notice.html"),
           lock: resolve(__dirname, "src/renderer/lock.html"),
+          picker: resolve(__dirname, "src/renderer/picker.html"),
         },
-        output: { manualChunks: (id) => (id.includes("node_modules") ? "vendor" : undefined) },
+        // the graph editor stays out of the small pages (overlay, notice, lock, picker)
+        output: { manualChunks: (id) => (id.includes("@xyflow") || id.includes("@dnd-kit") ? "flow" : id.includes("node_modules") ? "vendor" : undefined) },
       },
     },
   },

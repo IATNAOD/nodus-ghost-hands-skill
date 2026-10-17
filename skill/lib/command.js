@@ -6,7 +6,7 @@
 "use strict";
 
 const state = require("./state");
-const { classify } = require("./parse");
+const { classify, SCENARIO_WORDS } = require("./parse");
 const { readSettings } = require("./settings");
 const { resolveActor, choosePc, ASK_TIMEOUT_MS } = require("./select");
 const { answerKind, isCancel } = require("./confirm");
@@ -15,6 +15,7 @@ const { ordinalOf } = require("./text");
 const { pickApp } = require("./llm-pick");
 const { wake } = require("./wol");
 const { trace } = require("./trace");
+const { newRunId } = require("./scenarios");
 
 const POWER_ACTIONS = {
   shutdown: "power.shutdown",
@@ -34,6 +35,7 @@ const ERROR_KEYS = new Set([
   "offline", "timeout", "disconnected", "feature-disabled", "paused", "app-not-found", "launcher-missing",
   "launch-failed", "needs-elevation", "cancelled", "not-running", "close-timeout", "helper-unavailable",
   "no-audio-device", "invalid-args", "unknown-action", "busy", "parental-limit",
+  "scenario-not-found", "scenario-busy", "scenario-invalid",
 ]);
 
 /* ── helpers ── */
@@ -80,13 +82,20 @@ const keyFor = (base, pool) => (pool.length > 1 ? `${base}_on_pc` : base);
 
 /* ── apps ── */
 
+/** What to call a match aloud: a scenario by its whole name, an app without the subtitle. */
+const nameOf = (candidate) => (candidate?.kind === "scenario" ? candidate.app?.spoken || candidate.name : candidate?.app ? spokenName(candidate.app) : candidate?.name ?? "");
+
+/** In "which one?" a scenario named like an app says it is a scenario. */
+const optionName = (env, option) => (option.kind === "scenario" ? t(env, "intents.launch_app.scenario_option", { name: nameOf(option) }) : nameOf(option));
+
 /**
  * Resolve a spoken app name over PCs: certain match, confirmed weak match,
  * a question between close names, the AI pick as the last resort.
  * @returns {Promise<{ ok: true, key: string, name: string, byDevice: Map<string, object>, learn: string|null } | { ok: false, answer: string }>}
  */
-async function resolveApp(env, spoken, scope, { running = false, verb = "launch" } = {}) {
-  const result = env.index.matchApps(spoken, scope, { running });
+async function resolveApp(env, spoken, scope, { running = false, verb = "launch", scenarios = "exclude" } = {}) {
+  const result = env.index.matchApps(spoken, scope, { running, scenarios });
+  const confirmKey = (candidate) => (candidate?.kind === "scenario" ? "intents.pc_scenario.confirm" : verb === "close" ? "intents.close_app.confirm" : "intents.launch_app.confirm");
   const target = (key, learn = null) => {
     const byDevice = new Map();
 
@@ -100,14 +109,13 @@ async function resolveApp(env, spoken, scope, { running = false, verb = "launch"
 
     const first = [...byDevice.values()].sort((a, b) => b.score - a.score)[0];
 
-    return { ok: true, key, name: first?.app ? spokenName(first.app) : first?.name ?? spoken, byDevice, learn };
+    return { ok: true, key, name: first ? nameOf(first) : spoken, byDevice, learn, scenario: first?.kind === "scenario" };
   };
 
   if (result.status === "match") return target(result.best.key);
 
   if (result.status === "weak") {
-    const name = result.best.app ? spokenName(result.best.app) : result.best.name;
-    const answer = await confirm(env, t(env, verb === "close" ? "intents.close_app.confirm" : "intents.launch_app.confirm", { name }));
+    const answer = await confirm(env, t(env, confirmKey(result.best), { name: nameOf(result.best) }));
 
     if (answer === "yes") return target(result.best.key);
 
@@ -116,7 +124,7 @@ async function resolveApp(env, spoken, scope, { running = false, verb = "launch"
 
   if (result.status === "ambiguous") {
     const options = result.options;
-    const names = options.map((option) => (option.app ? spokenName(option.app) : option.name));
+    const names = options.map((option) => optionName(env, option));
     const text = await ask(env, t(env, "common.which_app", { names }));
 
     if (text === null) return { ok: false, answer: t(env, "common.not_heard") };
@@ -127,6 +135,11 @@ async function resolveApp(env, spoken, scope, { running = false, verb = "launch"
     if (ordinal && options[ordinal - 1]) return target(options[ordinal - 1].key);
 
     const tokens = prepare(text);
+    // «сценарий»: the scenario named like an app
+    const scenario = tokens.some((token) => SCENARIO_WORDS.has(token.word)) ? options.filter((option) => option.kind === "scenario") : [];
+
+    if (scenario.length === 1) return target(scenario[0].key);
+
     const best = options
       .map((option) => ({ option, score: option.app ? scoreApp(tokens, option.app).score : 0 }))
       .sort((a, b) => b.score - a.score)[0];
@@ -135,7 +148,7 @@ async function resolveApp(env, spoken, scope, { running = false, verb = "launch"
   }
 
   // nobody matched: the AI may know that "ведьмак" is "The Witcher"
-  if (env.settings.aiNames) {
+  if (env.settings.aiNames && scenarios !== "only") {
     const choices = uniqueApps(scope, running);
     const started = Date.now();
     const picked = await pickApp(env.ctx, spoken, choices);
@@ -160,7 +173,9 @@ async function resolveApp(env, spoken, scope, { running = false, verb = "launch"
     }
   }
 
-  return { ok: false, answer: t(env, verb === "close" ? "intents.close_app.not_found" : "intents.launch_app.not_found", { name: spoken }) };
+  const missing = scenarios === "only" ? "intents.pc_scenario.not_found" : verb === "close" ? "intents.close_app.not_found" : "intents.launch_app.not_found";
+
+  return { ok: false, answer: t(env, missing, { name: spoken }) };
 }
 
 /** Apps of the PCs as choices for the AI: one per name. */
@@ -211,7 +226,7 @@ async function launchFlow(env, params) {
   const targets = [];
 
   for (const object of objects) {
-    const resolved = await resolveApp(env, object, scope, { verb: "launch" });
+    const resolved = await resolveApp(env, object, scope, { verb: "launch", scenarios: "include" });
 
     if (!resolved.ok) return resolved.answer;
     targets.push(resolved);
@@ -222,7 +237,7 @@ async function launchFlow(env, params) {
     index,
     actor,
     pc: params.pc,
-    feature: "launch",
+    feature: targets.every((target) => target.scenario) ? "scenarios" : "launch",
     able: has,
     recent: env.skill.recent,
     askEveryTime: env.settings.askPcEveryTime,
@@ -243,6 +258,13 @@ async function launchOn(env, actor, device, targets, pool) {
   for (const target of targets) {
     const candidate = target.byDevice.get(device.deviceId);
 
+    if (candidate?.scenarioId) {
+      const result = await send(env, actor, device, "scenario.run", { id: candidate.scenarioId, runId: newRunId(), via: "voice" }, target.name);
+
+      if (!result.ok) return failure(env, device, result, target.name);
+      started.push({ name: target.name, already: result.data?.already === true, scenario: true });
+      continue;
+    }
     if (!candidate?.appId) return t(env, "intents.launch_app.not_on_pc", { name: target.name, pc: device.name });
 
     const result = await send(env, actor, device, "app.launch", { appId: candidate.appId }, target.name);
@@ -254,8 +276,9 @@ async function launchOn(env, actor, device, targets, pool) {
 
   if (started.length === 1) {
     const [only] = started;
+    const base = only.scenario ? (only.already ? "intents.launch_app.scenario_already" : "intents.launch_app.scenario_started") : only.already ? "intents.launch_app.already" : "intents.launch_app.done";
 
-    return t(env, keyFor(only.already ? "intents.launch_app.already" : "intents.launch_app.done", pool), { name: only.name, pc: device.name });
+    return t(env, keyFor(base, pool), { name: only.name, pc: device.name });
   }
 
   return t(env, keyFor("intents.launch_app.done_many", pool), { names: started.map((item) => item.name), pc: device.name });
@@ -725,6 +748,96 @@ async function parentalFlow(env, params) {
   return t(env, "intents.pc_parental.granted", { ...vars, until: `${until.getHours()}:${String(until.getMinutes()).padStart(2, "0")}` });
 }
 
+/**
+ * «запусти сценарий утро на компьютере», «останови сценарий на компьютере»,
+ * «останови режим стрима» while it runs.
+ */
+async function scenarioFlow(env, params) {
+  const { ctx, index } = env;
+  const actor = await resolveActor(ctx, env.settings, { index });
+
+  if (!actor.ok) return actor.answer;
+
+  const pool = index.pool(actor.userId, { sharedOnly: actor.sharedOnly });
+
+  if (!pool.length) return t(env, actor.sharedOnly ? "common.no_shared_pcs" : "common.no_pcs");
+
+  const scope = params.pc?.ids?.length ? pool.filter((device) => params.pc.ids.includes(device.deviceId)) : pool;
+
+  return params.op === "stop" ? stopScenarios(env, actor, pool, scope, params) : runScenario(env, actor, scope, params);
+}
+
+async function runScenario(env, actor, scope, params) {
+  let name = typeof params.object === "string" ? params.object.trim() : "";
+
+  if (!name) {
+    const text = await ask(env, t(env, "intents.pc_scenario.what"));
+
+    if (text === null) return t(env, "common.not_heard");
+    if (isCancel(text) || answerKind(text) === "no") return t(env, "common.cancelled");
+    name = text;
+  }
+
+  const target = await resolveApp(env, name, scope, { verb: "launch", scenarios: "only" });
+
+  if (!target.ok) return target.answer;
+
+  const choice = await choosePc(env.ctx, {
+    index: env.index,
+    actor,
+    pc: params.pc,
+    feature: "scenarios",
+    able: (device) => target.byDevice.has(device.deviceId),
+    recent: env.skill.recent,
+    askEveryTime: env.settings.askPcEveryTime,
+  });
+
+  if (!choice.ok) return choice.answer;
+
+  return launchOn(env, actor, choice.devices[0], [target], choice.pool);
+}
+
+async function stopScenarios(env, actor, pool, scope, params) {
+  const online = scope.filter((device) => device.online && env.hub.supports?.(device.deviceId, "scenarios"));
+
+  if (!online.length) return t(env, scope.length === 1 ? "common.pc_offline" : "common.all_offline", { pc: scope[0]?.name ?? "" });
+
+  const busy = online.filter((device) => device.runningScenarios?.length);
+  const name = typeof params.object === "string" ? params.object.trim() : "";
+
+  if (params.all || !name) {
+    if (!busy.length) return t(env, online.length === 1 ? "intents.pc_scenario.nothing_running_on_pc" : "intents.pc_scenario.nothing_running", { pc: online[0].name });
+
+    for (const device of busy) {
+      const result = await send(env, actor, device, "scenario.stop", { all: true }, "all");
+
+      if (!result.ok) return failure(env, device, result);
+    }
+
+    return t(env, busy.length > 1 ? "intents.pc_scenario.stopped_everywhere" : keyFor("intents.pc_scenario.stopped_all", pool), { pc: busy[0].name });
+  }
+
+  const found = env.index.matchApps(name, busy, { scenarios: "only", voiceOnly: false, runningScenarios: true });
+
+  if (found.status === "none") {
+    const known = env.index.matchApps(name, online, { scenarios: "only", voiceOnly: false });
+
+    return known.status === "none" ? t(env, "intents.pc_scenario.not_found", { name }) : t(env, "intents.pc_scenario.not_running", { name: nameOf(known.best) });
+  }
+
+  // the best name; it may run on several PCs
+  const runs = found.candidates.filter((candidate) => candidate.key === found.best.key);
+
+  for (const device of busy.filter((item) => runs.some((run) => run.deviceId === item.deviceId))) {
+    const run = runs.find((item) => item.deviceId === device.deviceId);
+    const result = await send(env, actor, device, "scenario.stop", { id: run.scenarioId }, run.name);
+
+    if (!result.ok) return failure(env, device, result, run.name);
+  }
+
+  return t(env, "intents.pc_scenario.stopped", { name: nameOf(found.best) });
+}
+
 async function statusFlow(env) {
   const { ctx, index } = env;
   const actor = await resolveActor(ctx, env.settings, { index });
@@ -762,7 +875,7 @@ async function statusFlow(env) {
 /**
  * @param {object} ctx request ctx (or a lifecycle ctx for scenario blocks)
  * @param {Array|null} configs device settings (3rd argument of handler)
- * @param {string} intent launch_app | close_app | pc_power | pc_wake | pc_volume | pc_media | pc_search | pc_status
+ * @param {string} intent launch_app | close_app | pc_power | pc_wake | pc_volume | pc_media | pc_search | pc_status | pc_parental | pc_scenario
  * @param {object} rawParams params from match(), the AI agent or a block
  * @param {{ via?: "voice"|"agent"|"node" }} options
  * @returns {Promise<string>} the answer to say
@@ -812,6 +925,7 @@ const FLOWS = {
   pc_search: searchFlow,
   pc_status: statusFlow,
   pc_parental: parentalFlow,
+  pc_scenario: scenarioFlow,
 };
 
 module.exports = { runCommand, resolveApp, delayVars, POWER_ACTIONS };

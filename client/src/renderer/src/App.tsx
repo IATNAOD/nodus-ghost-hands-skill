@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Activity, Gamepad2, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Activity, Gamepad2, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal, Workflow } from "lucide-react";
 import type { UiState } from "../../shared/types";
 import { TEXTS, TextsContext } from "./i18n";
 import { Logo, ToastProvider } from "./ui";
@@ -8,17 +8,29 @@ import { Status, statusText, statusTone } from "./screens/Status";
 import { Apps } from "./screens/Apps";
 import { Commands } from "./screens/Commands";
 import { Settings } from "./screens/Settings";
+import { Scenarios, type ScenarioTarget } from "./screens/Scenarios";
 
-type Page = "status" | "apps" | "commands" | "settings";
+type Page = "status" | "apps" | "scenarios" | "commands" | "settings";
 
 export function App() {
   const [state, setState] = useState<UiState | null>(null);
   const [page, setPage] = useState<Page>("status");
+  const [target, setTarget] = useState<ScenarioTarget | null>(null);
 
   useEffect(() => {
     window.gh.getState().then(setState);
     return window.gh.onState(setState);
   }, []);
+
+  // "open at the failing step" from a notification
+  useEffect(
+    () =>
+      window.gh.onOpenScenario(({ id, nodeId }) => {
+        setPage("scenarios");
+        setTarget({ id, nodeId, at: Date.now() });
+      }),
+    [],
+  );
 
   if (!state) return <div className="titlebar" />;
 
@@ -26,6 +38,7 @@ export function App() {
   const nav: [Page, string, ReactNode][] = [
     ["status", t.navStatus, <Activity key="s" />],
     ["apps", t.navApps, <Gamepad2 key="a" />],
+    ["scenarios", t.navScenarios, <Workflow key="w" />],
     ["commands", t.navCommands, <SlidersHorizontal key="c" />],
     ["settings", t.navSettings, <SettingsIcon key="o" />],
   ];
@@ -45,7 +58,7 @@ export function App() {
               </div>
               <nav className="nav">
                 {nav.map(([id, label, icon]) => (
-                  <button key={id} type="button" className={page === id ? "active" : ""} onClick={() => setPage(id)}>
+                  <button key={id} type="button" className={page === id ? "active" : ""} title={label} onClick={() => setPage(id)}>
                     {icon}
                     {label}
                   </button>
@@ -59,8 +72,8 @@ export function App() {
                 <span className="muted">«{state.device.name}»</span>
               </div>
             </aside>
-            <main className="main">
-              {state.parental.enabled && (
+            <main className={`main${page === "scenarios" ? " main-scenarios" : ""}`}>
+              {state.parental.enabled && page !== "scenarios" && (
                 <div className="banner" style={{ maxWidth: 940, marginBottom: 16 }}>
                   <ShieldCheck />
                   <span>{t.parentalBanner}</span>
@@ -68,6 +81,7 @@ export function App() {
               )}
               {page === "status" && <Status state={state} />}
               {page === "apps" && <Apps state={state} />}
+              {page === "scenarios" && <Scenarios state={state} target={target} />}
               {page === "commands" && <Commands state={state} />}
               {page === "settings" && <Settings state={state} />}
             </main>

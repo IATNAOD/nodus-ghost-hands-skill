@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import os from "os";
+import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { app, dialog, shell, powerMonitor } from "electron";
@@ -22,7 +23,15 @@ import { RunningMonitor } from "./system/running";
 import { Catalog } from "./catalog";
 import { listStartApps, startId, type StartApp } from "./catalog/startmenu";
 import { Dispatcher, type Command } from "./exec";
-import { launchApp } from "./exec/apps";
+import { launchApp, ok, fail } from "./exec/apps";
+import { ScenarioService, pathBlocked, type ScenarioWireEvent } from "./scenarios/service";
+import { buildExport, parseImport, reviewOf } from "./scenarios/transfer";
+import { ScenarioScreen } from "./scenarios/screen";
+import { ScenarioTriggers } from "./scenarios/triggers";
+import { checkScenarioNames } from "./scenarios/names";
+import { newId, VAR_NAME_RE, type Scenario } from "../shared/scenarios/model";
+import { sanitizeValue } from "../shared/scenarios/validate";
+import { nodeText } from "../shared/scenarios/texts";
 import { PowerControl, type OverlayHost } from "./exec/power";
 import { Connection, type SkillSettings, type Welcome } from "./net/connection";
 import type { Updater } from "./updater";
@@ -56,11 +65,14 @@ const systemLanguage = (): Language => (app.getLocale().toLowerCase().startsWith
  * Everything the client does, behind one object: the window, the tray and the
  * IPC handlers only call it and listen to "state".
  */
-const CLIENT_CAPS = ["window.close", "media.control", "parental"];
+const CLIENT_CAPS = ["window.close", "media.control", "parental", "scenarios"];
 /** Under parental control nothing of these changes on the PC: the owner sets it in the panel. */
 const LOCKED_METHODS = new Set([
   "setDevice", "setServer", "addApp", "removeApp", "addStartApps", "pickExecutable", "rescan",
   "setFeatures", "setPrefs", "setUi", "unpair",
+  // scenarios run under parental control, but nobody changes them on the PC
+  "createScenario", "saveScenario", "deleteScenario", "importScenario", "confirmImport", "setVariable", "deleteVariable",
+  "captureTemplate", "pickRegion", "pickPoint",
 ]);
 // under parental control the child still names apps for the voice: setApp with only these
 const OPEN_APP_FIELDS = new Set(["aliases", "spoken"]);
@@ -76,7 +88,15 @@ export class Core extends EventEmitter {
   connection!: Connection;
   parental!: ParentalController;
   parentalWindows!: ParentalWindows;
+  scenarios!: ScenarioService;
+  scenarioScreen!: ScenarioScreen;
+  scenarioTriggers!: ScenarioTriggers;
   updater: Updater | null = null;
+
+  /** what the skill understands beyond protocol 1.0 (welcome.server.caps) */
+  private serverCaps = new Set<string>();
+  /** imports waiting for the person's yes */
+  private imports = new Map<string, Scenario>();
 
   private warnings = new Map<string, { alias: string; code: string }[]>();
   private nameError: string | null = null;
@@ -119,6 +139,59 @@ export class Core extends EventEmitter {
       report: () => this.scheduleState(),
     });
     this.dispatcher = new Dispatcher({ helper: this.helper, catalog: this.catalog, running: this.running, store: this.store }, this.power, this.parental);
+    this.scenarios = new ScenarioService({
+      dir,
+      helper: this.helper,
+      catalog: this.catalog,
+      running: this.running,
+      dispatcher: this.dispatcher,
+      settings: this.store,
+      parental: {
+        locked: () => this.parentalWindows.locked,
+        blocksPath: (file) => this.parental.enabled && pathBlocked(file, this.catalog, (target) => this.parental.blocksLaunch(target)),
+      },
+      skill: { say: (text, runId) => this.sayToSkill(text, runId), event: (event) => this.scenarioEvent(event) },
+      // the service fills the {placeholders} itself
+      texts: () => ({
+        failedTitle: t("scenarioFailedTitle", { name: "{name}" }),
+        failedBody: t("scenarioFailedBody", { step: "{step}", error: "{error}" }),
+        failedSay: t("scenarioFailedSay", { name: "{name}" }),
+        open: t("scenarioOpen"),
+        step: (type) => nodeText(getLanguage(), type).title,
+      }),
+      openEditor: (id, nodeId) => this.emit("open-scenario", { id, nodeId }),
+      protectWindows: (on) => this.emit("protect", on),
+      log,
+    });
+    this.scenarioScreen = new ScenarioScreen(this.helper, this.scenarios, {
+      language: getLanguage,
+      hideMain: (hidden) => this.emit("hide-main", hidden),
+      warn: (text) => log.warn(text),
+    });
+    this.scenarioTriggers = new ScenarioTriggers(this.scenarios, this.store);
+    // the skill starts and stops scenarios (voice, NODUS blocks): only enabled ones
+    this.dispatcher.scenarios = {
+      run: (args) => {
+        const id = String(args.id ?? "");
+        if (!this.scenarios.store.get(id)?.enabled) return fail("scenario-not-found");
+
+        const text = typeof args.text === "string" ? args.text : typeof args.input === "string" ? args.input : "";
+        const started = this.scenarios.start(id, {
+          trigger: args.via === "nodus" ? "nodus" : "voice",
+          text: text.slice(0, LIMITS.scenarioInput),
+          runId: typeof args.runId === "string" ? args.runId : undefined,
+        });
+        return started.ok ? ok({ runId: started.runId, name: started.name, already: Boolean(started.already) }) : fail(started.code);
+      },
+      stop: (args) =>
+        ok({
+          stopped: this.scenarios.stop({
+            runId: typeof args.runId === "string" ? args.runId : undefined,
+            scenarioId: typeof args.id === "string" ? args.id : undefined,
+            all: args.all === true,
+          }),
+        }),
+    };
     this.connection = new Connection({
       getKey: () => this.secure.getKey(),
       getServer: () => this.store.get().server,
@@ -137,6 +210,9 @@ export class Core extends EventEmitter {
 
     this.wire();
     await this.parental.init();
+    await this.scenarios.init();
+    this.scenarioScreen.init();
+    this.scenarioTriggers.init();
     this.helper.start();
 
     if (await this.secure.getKey()) this.connection.start();
@@ -187,6 +263,15 @@ export class Core extends EventEmitter {
       this.emit("ui");
       this.emitState();
     });
+    this.scenarios.on("change", () => {
+      // names for the voice changed: the skill must know
+      if (this.configKey() !== this.lastConfig && this.connection.isOnline()) this.store.update(() => undefined);
+      this.scheduleState();
+      this.emitState();
+      this.emit("ui");
+    });
+    this.scenarios.on("saved", () => this.emitState());
+    this.scenarios.on("events", (events) => this.emit("run-events", events));
 
     const wake = () => {
       if (this.connection.status !== "unpaired") this.connection.reconnectNow();
@@ -207,6 +292,13 @@ export class Core extends EventEmitter {
       aliases: settings.device.aliases,
       shared: settings.device.shared,
       apps: this.catalog.configApps(),
+      scenarios: this.scenarios.summaries().map((scenario) => ({
+        id: scenario.id,
+        name: scenario.name,
+        aliases: scenario.voice.aliases,
+        spoken: scenario.voice.spoken,
+        voice: scenario.enabled && scenario.voice.enabled,
+      })),
       features: settings.features,
       prefs: {
         confirmPower: settings.prefs.confirmPower,
@@ -256,7 +348,31 @@ export class Core extends EventEmitter {
         muted: this.volume?.muted ?? null,
         shutdownAt: this.power.shutdownAt(),
         parental: this.parental.report(),
+        scenarios: this.scenarios.runs().map((run) => ({ id: run.scenarioId, runId: run.runId })),
       },
+    });
+  }
+
+  /** A scenario step asks NODUS to say something; false when the skill cannot hear it now. */
+  private sayToSkill(text: string, runId: string): boolean {
+    if (!this.connection.isOnline() || !this.serverCaps.has("scenarios")) return false;
+    return this.connection.send(MSG.SAY, { text: text.slice(0, LIMITS.sayText), runId });
+  }
+
+  /** Runs started and finished: the NODUS block waits for them, NODUS scenarios react. */
+  private scenarioEvent(event: ScenarioWireEvent): void {
+    if (this.connection.isOnline() && this.serverCaps.has("scenarios")) this.connection.send(MSG.SCENARIO, { ...event });
+  }
+
+  /** Voice names of a scenario as NODUS would hear them, with the apps and scenarios of this PC. */
+  private checkScenarioName(id: string, names: string[]) {
+    return checkScenarioNames({
+      id,
+      names,
+      apps: this.catalog.configApps(),
+      scenarios: this.scenarios.summaries(),
+      device: { name: this.store.get().device.name, aliases: this.store.get().device.aliases },
+      accept: this.skill.accept,
     });
   }
 
@@ -271,6 +387,7 @@ export class Core extends EventEmitter {
     );
     this.nameError = null;
     this.skill.version = typeof welcome.server?.version === "string" ? welcome.server.version : null;
+    this.serverCaps = new Set(Array.isArray(welcome.server?.caps) ? welcome.server.caps.filter((cap): cap is string => typeof cap === "string") : []);
     this.applySkillSettings(welcome.settings);
     this.parental.setOwner(typeof welcome.owner?.id === "string" ? welcome.owner.id : null);
     // "the client was killed" waited for NODUS
@@ -392,13 +509,15 @@ export class Core extends EventEmitter {
       helper: { ok: this.helper.ok, error: this.helper.lastError },
       skill: { ...this.skill },
       parental: this.parental.view(),
+      scenarios: this.scenarios.summaries(),
+      runs: this.scenarios.runs(),
     };
   }
 
   /* ── API for the window ── */
 
   // deep links live in index.ts: takePairLink is answered there
-  private api: Omit<GhostApi, "onState" | "onPairLink" | "takePairLink"> = {
+  private api: Omit<GhostApi, "onState" | "onPairLink" | "takePairLink" | "onRunEvents" | "onOpenScenario"> = {
     getState: async () => this.uiState(),
 
     pair: (request) => this.pair(request),
@@ -561,6 +680,77 @@ export class Core extends EventEmitter {
     cancelCountdown: async () => {
       await this.power.cancel();
     },
+
+    /* ── scenarios ── */
+
+    getScenario: async (id) => this.scenarios.get(String(id)),
+    createScenario: async (name) => this.scenarios.create(String(name ?? "")),
+    saveScenario: async (scenario) => this.scenarios.save(scenario),
+    deleteScenario: async (id) => this.scenarios.remove(String(id)),
+    runScenario: async (id, options) => {
+      const fromNodeId = typeof options?.fromNodeId === "string" ? options.fromNodeId : undefined;
+      return this.scenarios.start(String(id), { trigger: fromNodeId ? "debug" : "manual", fromNodeId });
+    },
+    stopScenario: async (selector) =>
+      this.scenarios.stop({
+        runId: typeof selector?.runId === "string" ? selector.runId : undefined,
+        scenarioId: typeof selector?.scenarioId === "string" ? selector.scenarioId : undefined,
+        all: selector?.all === true,
+      }),
+    getRuns: async (scenarioId) => this.scenarios.history.list(typeof scenarioId === "string" ? scenarioId : undefined),
+    getRunLog: async (runId) => this.scenarios.history.get(String(runId)) ?? null,
+    setRunEvents: async (on) => this.scenarios.setListening(Boolean(on)),
+    getVariables: async () => this.scenarios.variables.all(),
+    setVariable: async (scope, scenarioId, name, value) => {
+      if ((scope !== "scenario" && scope !== "global") || !VAR_NAME_RE.test(String(name))) throw new Error("invalid-args");
+      this.scenarios.variables.set(scope, String(scenarioId), String(name), sanitizeValue(value));
+    },
+    deleteVariable: async (scope, scenarioId, name) => {
+      if (scope === "scenario" || scope === "global") this.scenarios.variables.delete(scope, String(scenarioId), String(name));
+    },
+    getAsset: async (asset) => {
+      const png = typeof asset === "string" && /^[0-9a-f]{64}$/.test(asset) ? await this.scenarios.store.readAsset(asset) : null;
+      return png ? `data:image/png;base64,${png.toString("base64")}` : null;
+    },
+    exportScenario: async (id) => {
+      const scenario = this.scenarios.store.get(String(id));
+      if (!scenario) return false;
+
+      const result = await dialog.showSaveDialog({
+        title: t("scenarioExport"),
+        defaultPath: `${scenario.name.replace(/[\\/:*?"<>|]+/g, " ").trim() || "scenario"}.ghscenario`,
+        filters: [{ name: "Ghost Hands", extensions: ["ghscenario"] }],
+      });
+      if (result.canceled || !result.filePath) return false;
+
+      await fs.writeFile(result.filePath, await buildExport(scenario, (sha) => this.scenarios.store.readAsset(sha)), "utf8");
+      return true;
+    },
+    importScenario: async () => {
+      const result = await dialog.showOpenDialog({ title: t("scenarioImport"), properties: ["openFile"], filters: [{ name: "Ghost Hands", extensions: ["ghscenario", "json"] }] });
+      if (result.canceled || !result.filePaths[0]) return null;
+
+      const { scenario, assets } = parseImport(await fs.readFile(result.filePaths[0]));
+      for (const png of assets.values()) await this.scenarios.store.putAsset(png).catch(() => undefined);
+
+      const token = newId(16);
+      this.imports.set(token, scenario);
+      return reviewOf(scenario, (appId) => this.catalog.all().find((item) => item.id === appId)?.name ?? appId, token);
+    },
+    confirmImport: async (token) => {
+      const scenario = this.imports.get(String(token));
+      if (!scenario) throw new Error("import-expired");
+      this.imports.delete(String(token));
+      return this.scenarios.adopt(scenario);
+    },
+    captureTemplate: async () => this.scenarioScreen.captureTemplate(),
+    pickPoint: async () => this.scenarioScreen.pickPoint(),
+    pickRegion: async () => this.scenarioScreen.pickRegion(),
+    listDisplays: async () => this.scenarioScreen.displays(),
+    getOcrLanguages: async () => this.scenarioScreen.ocrLanguages(),
+    checkHotkey: async (accelerator, scenarioId) => this.scenarioTriggers.check(String(accelerator), String(scenarioId)),
+    suspendHotkeys: async (on) => this.scenarioTriggers.suspend(Boolean(on)),
+    checkScenarioName: async (id, names) => this.checkScenarioName(String(id), Array.isArray(names) ? names.map(String) : []),
   };
 
   async invoke(method: InvokeMethod, args: unknown[]): Promise<unknown> {
@@ -724,6 +914,9 @@ export class Core extends EventEmitter {
   /** @param reason "shutdown" - Windows ends the session: not a reason to worry the owner */
   async shutdown(reason: "quit" | "shutdown" = "quit"): Promise<void> {
     this.connection.bye(reason);
+    this.scenarioTriggers.dispose();
+    this.scenarioScreen.dispose();
+    await this.scenarios.dispose();
     await this.parental.dispose();
     this.connection.stop(this.connection.status);
     this.power.dispose();

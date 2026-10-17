@@ -144,6 +144,27 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `nic.info` | — | `[{name, description, mac, type, up, ipv4:[{address, mask}]}]` |
 | `file.info` | `{path}` | `{exists, product, description, company, version}` |
 
+**Scenarios** (screen, input, OCR). These work in **physical pixels of the virtual desktop**: each runs inside a per-monitor-v2 DPI scope that is restored afterwards; the older commands are not affected.
+
+| cmd | args | data |
+|---|---|---|
+| `screen.list` | — | `{dpiAware, virtual:{x,y,w,h}, monitors:[{id, primary, bounds, work, dpi, scale}]}` |
+| `screen.capture` | `{rect:{x,y,w,h}}` or `{monitors:[id]}`, `format: gray\|bgra`, `files:[path]` | `{frames:[{monitor, x, y, w, h, stride, format, file, uniform, min, max}], ms}` — pixels go to the given files (only `%TEMP%\*.raw`), never to stdout; `uniform` — a one-colour frame (an exclusive full-screen game, a protected window). A blocked capture → `capture-blocked` |
+| `cursor.get` | — | `{x, y, monitor}` |
+| `window.foreground` | — | `{pid, exe, rect, monitor, elevated}` (`rect` — the DWM frame, without the invisible border) |
+| `window.rect` | `{pid}` | `{rect, minimized}` of the process's main window |
+| `input.keys` | `{keys:[{scan, ext, vk}], action: press\|down\|up, holdMs?, repeat?, intervalMs?, guard?, dryRun?}` | `{sent}`; `dryRun` → `{inputs:[...]}` (the INPUT array, nothing sent). Scan codes with `KEYEVENTF_EXTENDEDKEY`; media, browser keys, Pause and PrintScreen by virtual code |
+| `input.text` | `{text, mode: unicode\|keys, intervalMs?, guard?, dryRun?}` | `{sent}`; Enter and Tab always as keys |
+| `input.mouse` | `{action: move\|click\|down\|up, x, y, button: left\|right\|middle\|x1\|x2, clicks?, holdMs?, smoothMs?, guard?, dryRun?}` | `{sent}`; `SetCursorPos`, then the buttons |
+| `input.scroll` | `{amount, horizontal?, x?, y?, guard?, dryRun?}` | `{sent}` (`amount` in wheel notches, −100..100) |
+| `input.release` | `{keys?:[...], buttons?:[...]}` | `{sent}` — key-ups and button-ups for what a stopped scenario held |
+| `input.state` | — | `{modifiers:[...], buttons:[...]}` held now |
+| `input.waitRelease` | `{timeoutMs}` | `{released}` — waits until the person lets go of the modifiers (a hotkey-started run) |
+| `ocr.languages` | — | `{languages:[{tag, name}], profile:[tag], maxDimension}` |
+| `ocr.read` | `{monitors:[id]}` or `{rect}` or `{image: path}`, `lang`, `upscale?` | `{lang, lines:[{text, rect, words:[{text, rect}]}], ms}` — large frames are read in overlapping tiles (`maxDimension`), small text is upscaled ×2. No language pack → `ocr-language`; no WinRT → `unsupported` |
+
+Every `input.*` checks before sending: the input desktop is the user's (not UAC or the lock screen) → else `input-blocked`; the foreground window is not elevated above the helper → else `needs-elevation`; with `guard:{pids:[...]}` the foreground window belongs to one of those processes → else `focus-lost`.
+
 ### Notes on specific commands
 
 - **Window filtering** (`windows.list`): visible, unowned, not
@@ -176,6 +197,12 @@ and per-pid kill codes `access-denied` / `not-found` / `protected`.
 | `Processes.cs` | Toolhelp snapshot, process list/close/kill/start |
 | `Power.cs` | lock / sleep / display-off |
 | `Input.cs` | media keys (SendInput) |
+| `Dpi.cs` | `DpiScope`: per-monitor-v2 DPI awareness for one command, restored after it |
+| `Screen.cs` | monitors, `screen.capture` to temp files, `cursor.get` |
+| `Keyboard.cs` | `input.keys`, `input.text`, `input.release`, `input.state`, `input.waitRelease` |
+| `Mouse.cs` | `input.mouse`, `input.scroll` |
+| `InputGuard.cs` | checks before any input: input desktop, elevation, the guarded window |
+| `Ocr.cs` | `ocr.languages`, `ocr.read` (`Windows.Media.Ocr`) |
 | `Media.cs` | `media.control` (SMTC over WinRT; `Microsoft.Windows.SDK.Contracts` at build time only) |
 | `Guard.cs` | `guard` mode: the parental-control watchdog |
 | `Shell.cs` | STA executor + Shell.Application (startapps, desktop.show) |

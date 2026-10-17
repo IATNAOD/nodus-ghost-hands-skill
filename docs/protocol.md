@@ -17,7 +17,7 @@
 ```json
 { "t": "hello", "proto": 1, "key": "GH-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX", "deviceId": null,
   "device": { "name": "Игровой", "aliases": [], "machineHash": "<sha256 hex>", "os": "Windows 10", "host": "DESKTOP-1", "client": "1.2.0",
-              "caps": ["window.close", "media.control", "parental"] } }
+              "caps": ["window.close", "media.control", "parental", "scenarios"] } }
 ```
 
 - `key` — личный ключ пользователя из «Моих настроек» навыка (Crockford base32: регистр, пробелы и дефисы не важны, I/L → 1, O → 0).
@@ -29,7 +29,7 @@
 
 ```json
 { "t": "welcome", "deviceId": "rzvp9IBAg3_W", "name": "Игровой", "owner": { "name": "Маша", "id": "64b0…" },
-  "server": { "version": "1.2.0", "protoMin": 1, "protoMax": 1, "caps": ["window.close", "media.control", "parental"] },
+  "server": { "version": "1.2.0", "protoMin": 1, "protoMax": 1, "caps": ["window.close", "media.control", "parental", "scenarios"] },
   "settings": { "match": { "accept": 0.86 } }, "created": true }
 ```
 
@@ -49,6 +49,9 @@
 | `window.close` | выполняет `window.close` | закрывает активное окно через `app.close { target: "foreground" }` |
 | `media.control` | выполняет `media.control` | шлёт `media.key` |
 | `parental` | принимает `parental`, шлёт `alert` и `state.data.parental` | не шлёт `parental`, на странице навыка — «обновите клиент» |
+| `scenarios` | выполняет `scenario.run` и `scenario.stop`, шлёт `config.data.scenarios`, `state.data.scenarios` | не шлёт команд сценариев: голос и блок NODUS их на этом ПК не находят |
+
+Клиент шлёт сообщения `scenario` и `say` только серверу с `scenarios` в `welcome.server.caps`; старый навык поля `scenarios` в `config` и `state` пропускает.
 
 Неизвестные типы сообщений обе стороны пропускают, соединение не рвётся.
 
@@ -58,13 +61,15 @@
 |---|---|---|
 | К → С | `config` | `rev` (число, растёт), `data` — полный снимок настроек ПК (ниже). Debounce 500 мс; без `config-ack` — повтор при следующем подключении |
 | С → К | `config-ack` | `rev`, `error` (`null`, `name-taken`, `name-invalid`, `invalid-rev`), `warnings: [{ appId, alias, code }]`, `code` — `alias-duplicate`, `alias-reserved`, `alias-too-short` |
-| К → С | `state` | `data: { running: [{ key, name, appId, game, fg }], volume, muted, shutdownAt, parental? }` — при изменении, не чаще раза в секунду. `parental` — учёт времени под родительским контролем (ниже) |
+| К → С | `state` | `data: { running: [{ key, name, appId, game, fg }], volume, muted, shutdownAt, parental?, scenarios? }` — при изменении, не чаще раза в секунду. `parental` — учёт времени под родительским контролем (ниже), `scenarios` — запуски сценариев, идущие сейчас: `[{ id, runId }]`, до 20 |
 | С → К | `cmd` | `id`, `action`, `args`, `timeoutMs` |
 | К → С | `result` | `id`, `ok`, `code`, `data` |
 | С → К | `learn` | `appId`, `alias` — голосовое название, подтверждённое человеком после подбора ИИ: клиент добавляет его к приложению и шлёт новый `config` |
 | С → К | `settings` | `match: { accept }` — после смены настроек навыка, всем подключённым ПК |
 | С → К | `parental` | правила родительского контроля (ниже): после `welcome` и при каждом изменении. Только клиенту с `parental` |
 | К → С | `alert` | `kind`, `until?` — событие родительского контроля для владельца (ниже) |
+| К → С | `scenario` | `runId`, `id`, `name`, `status` (`started`, `finished`), `result` (`success`, `error`, `stopped`), `output` (до 1000 символов), `error` (код), `trigger`, `ms` — запуск сценария начался или закончился (ниже, «Сценарии») |
+| К → С | `say` | `text` (до 300 символов), `runId` — шаг сценария просит NODUS сказать владельцу ПК; сервер принимает не больше 5 в минуту |
 | К → С | `bye` | `reason`: `quit`, `sleep`, `unpair` (сервер удаляет ПК), `shutdown` (Windows завершает сеанс) |
 
 Первый `config` соединения принимается при любом `rev` (переустановленный клиент начинает счёт заново), следующие — только с большим `rev`.
@@ -77,7 +82,8 @@
   "aliases": ["игровой компьютер"],
   "shared": false,
   "apps": [{ "id": "steam:570", "name": "Dota 2", "aliases": ["дота"], "spoken": "", "kind": "game", "source": "steam" }],
-  "features": { "launch": true, "close": true, "volume": true, "media": true, "power": true, "lock": true, "display": true, "search": true, "wake": true, "toast": true },
+  "scenarios": [{ "id": "k3v9x2m8q1zt", "name": "Режим стрима", "aliases": ["стрим"], "spoken": "", "voice": true }],
+  "features": { "launch": true, "close": true, "volume": true, "media": true, "power": true, "lock": true, "display": true, "search": true, "wake": true, "toast": true, "scenarios": true },
   "prefs": { "confirmPower": true, "searchEngine": "google", "volumeStep": 10, "forceCloseSec": 0, "shareRunning": true, "paused": false },
   "wol": { "mac": "aa:bb:cc:dd:ee:ff", "broadcast": "192.168.0.255", "adapter": "ethernet" },
   "client": { "version": "1.0.0", "os": "Windows 10" }
@@ -87,6 +93,7 @@
 - `apps` — только включённые: не больше 600, 16 алиасов по 64 символа. `id` — `steam:<appid>`, `epic:<AppName>`, `gog:<gameId>`, `start:<hash>`, `custom:<uuid>`, `url:<uuid>`, `virtual:<имя>`. `kind` — `game`, `app`, `site`. `spoken` — как называть вслух (иначе — название).
 - `shared` — общий ПК: им управляют все пользователи NODUS, его события запускают сценарии всех.
 - `running[].key` — непрозрачный ключ процесса или окна для `app.close`; `appId` — если это настроенное приложение. Заголовков окон нет.
+- `scenarios` — сценарии ПК: только название для голоса, без шагов; не больше 200, `id` — 12 символов `[a-z0-9]`. `voice: false` — сценарий выключен или без голосового названия: голос его не запускает, блок NODUS — может.
 
 ## Команды
 
@@ -108,6 +115,8 @@
 | `display.off` | `{ delaySec }` | — | `display` |
 | `web.search` | `{ query, engine }`, `engine` — `google`, `yandex`, `bing`, `duckduckgo`, `youtube` | — | `search` |
 | `toast.show` | `{ title, text }` | — | `toast` |
+| `scenario.run` | `{ id, runId?, text?, via: "voice" \| "nodus" }` | `{ runId, name, already }` — `already`: сценарий уже выполнялся, `runId` — того запуска | `scenarios` |
+| `scenario.stop` | `{ runId }` или `{ id }` или `{ all: true }` | `{ stopped }` — сколько запусков остановлено | `scenarios` |
 
 Клиент сам проверяет каждую команду: возможность включена, управление не на паузе, `appId` есть среди его включённых приложений, `key` — среди процессов из последнего `state`. Пути, аргументы и адреса по протоколу не передаются, поиск строится по шаблону поисковика клиента. Подменённый сервер может только то же, что голос.
 
@@ -115,7 +124,18 @@
 
 ### Коды `result.code`
 
-`app-not-found`, `launcher-missing`, `launch-failed`, `needs-elevation`, `cancelled`, `not-running`, `ambiguous` (`data.options: [{ key, name }]`), `close-timeout`, `feature-disabled`, `paused`, `helper-unavailable`, `no-audio-device`, `invalid-args`, `unknown-action`, `busy`, `protected` (системное окно), `no-session` (`media.control`: ничего не играет), `parental-limit` (`app.launch` игры, когда время игр или ПК вышло), `internal`. Сервер сам выставляет `timeout`, `disconnected`, `offline`.
+`app-not-found`, `launcher-missing`, `launch-failed`, `needs-elevation`, `cancelled`, `not-running`, `ambiguous` (`data.options: [{ key, name }]`), `close-timeout`, `feature-disabled`, `paused`, `helper-unavailable`, `no-audio-device`, `invalid-args`, `unknown-action`, `busy`, `protected` (системное окно), `no-session` (`media.control`: ничего не играет), `parental-limit` (`app.launch` игры, когда время игр или ПК вышло), `scenario-not-found` (нет такого сценария или он выключен), `scenario-busy` (уже идёт 8 запусков), `scenario-invalid` (в сценарии ошибки), `scenario-recursion`, `internal`. Сервер сам выставляет `timeout`, `disconnected`, `offline`.
+
+Коды ошибок запуска в `scenario.error` — те же плюс `input-blocked` (защищённый рабочий стол или заблокированный сеанс), `capture-blocked` (экран не захватывается: эксклюзивный полноэкранный режим, защищённое окно), `focus-lost` (впереди не то приложение, что задано в сценарии).
+
+## Сценарии
+
+Сценарии создаются и хранятся на ПК; навык знает о них только названия из `config.data.scenarios`.
+
+- `scenario.run` с голоса (`via: "voice"`) и из блока NODUS «Сценарий на компьютере» (`via: "nodus"`). Клиент отвечает сразу, сценарий выполняется дальше сам. `runId` (6–40 символов `[A-Za-z0-9_-]`) придумывает навык и начинает ждать до отправки команды: `finished` короткого сценария может прийти раньше ответа. `text` попадает в выход «Текст» узла «Старт».
+- Удалённый `scenario.run` проверяет возможность `scenarios`, паузу и родительский контроль, как другие команды; выключенный сценарий — `scenario-not-found`. Шаги сценария выполняются на ПК без проверок возможностей и паузы, но с лимитами родительского контроля.
+- `scenario` с `status: "finished"` навык передаёт ждущему блоку и запускает событие сценариев NODUS `pc_scenario_finished` (`text` и `scenario` — название, `status`, `output`, `error`, `computer`, `from`), не чаще 20 в минуту на ПК: цепочку «событие → сценарий NODUS → сценарий ПК → событие» NODUS сам не обрывает.
+- Остановка прогона NODUS, в котором блок ждёт сценарий, шлёт `scenario.stop { runId }`.
 
 ## Родительский контроль
 

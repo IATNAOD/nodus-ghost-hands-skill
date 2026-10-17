@@ -9,7 +9,7 @@ namespace GhostHelper
 {
     internal static class Program
     {
-        public const string Version = "1.0.0";
+        public const string Version = "1.1.0";
 
         private static int _selfPid;
         private static int _parentPid; // 0 = none
@@ -32,6 +32,8 @@ namespace GhostHelper
 
             ParseParentArg(args);
             SetupStdio();
+            // long input holds and OCR calls must not starve short commands
+            ThreadPool.SetMinThreads(16, 16);
 
             _sta = new StaExecutor();
             _watcher = new WindowsWatcher((name, data) => Out.WriteEvent(name, data));
@@ -138,12 +140,23 @@ namespace GhostHelper
             }
         }
 
+        // Like MediaControl: WinRT types that cannot load (an old Windows) are "unsupported".
+        private static object WinRt(Func<object> call, string what)
+        {
+            try { return call(); }
+            catch (HelperException) { throw; }
+            catch (Exception ex) when (ex is TypeLoadException || ex is System.IO.FileNotFoundException || ex is System.Runtime.InteropServices.COMException || ex is InvalidCastException)
+            {
+                throw new HelperException("unsupported", what + " is not available: " + ex.Message);
+            }
+        }
+
         private static object Dispatch(string cmd, Args args)
         {
             switch (cmd)
             {
                 case "ping":
-                    return new Dictionary<string, object> { ["version"] = Version, ["pid"] = _selfPid };
+                    return new Dictionary<string, object> { ["version"] = Version, ["pid"] = _selfPid, ["features"] = new List<object> { "screen", "input", "ocr" } };
 
                 case "selftest":
                     return BuildSelftest(_sta);
@@ -212,6 +225,36 @@ namespace GhostHelper
                 case "startapps.list":
                     return _sta.Run<object>(() => Shell.StartAppsList());
 
+                // ---- scenarios: screen, input, text (physical pixels) ----
+                case "screen.list":
+                    return Screen.List();
+                case "screen.capture":
+                    return Screen.Capture(args);
+                case "cursor.get":
+                    return Screen.Cursor();
+                case "window.foreground":
+                    return Windows.ForegroundInfo();
+                case "window.rect":
+                    return Windows.RectOf(args.GetInt("pid", required: true));
+                case "input.keys":
+                    return Keyboard.Keys(args);
+                case "input.text":
+                    return Keyboard.Text(args);
+                case "input.release":
+                    return Keyboard.Release(args);
+                case "input.state":
+                    return Keyboard.State();
+                case "input.waitRelease":
+                    return Keyboard.WaitRelease(args);
+                case "input.mouse":
+                    return Mouse.Act(args);
+                case "input.scroll":
+                    return Mouse.Scroll(args);
+                case "ocr.languages":
+                    return WinRt(() => Ocr.Languages(), "Text recognition");
+                case "ocr.read":
+                    return WinRt(() => Ocr.Read(args), "Text recognition");
+
                 // ---- registry ----
                 case "registry.read":
                     return RegistryCmd.Read(
@@ -262,6 +305,12 @@ namespace GhostHelper
             int nic = 0;
             try { nic = Network.Info().Count; } catch { }
 
+            int monitors = 0;
+            try { monitors = ((List<object>)Screen.List()["monitors"]).Count; } catch { }
+
+            int ocr = 0;
+            try { ocr = ((List<object>)((Dictionary<string, object>)WinRt(() => Ocr.Languages(), "ocr"))["languages"]).Count; } catch { }
+
             return new Dictionary<string, object>
             {
                 ["version"] = Version,
@@ -269,7 +318,9 @@ namespace GhostHelper
                 ["windows"] = windows,
                 ["startapps"] = startapps,
                 ["registry"] = registry,
-                ["nic"] = nic
+                ["nic"] = nic,
+                ["monitors"] = monitors,
+                ["ocrLanguages"] = ocr
             };
         }
 

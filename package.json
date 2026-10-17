@@ -1,6 +1,6 @@
 {
   "name": "nodus-ghost-hands",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Ghost Hands: voice control of Windows PCs through the NODUS voice assistant (skill + Electron client)",
   "license": "MIT",
